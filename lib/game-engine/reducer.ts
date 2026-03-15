@@ -17,6 +17,12 @@ import {
   shuffle,
 } from './utils';
 
+function invariant(condition: unknown, message: string): asserts condition {
+  if (!condition) {
+    throw new Error(message);
+  }
+}
+
 function toKey(teamName: string, playerName: string): string {
   return `${teamName}::${playerName}`;
 }
@@ -50,9 +56,7 @@ function getActiveRound(state: GameState): RoundState {
   const activeRound = state.rounds.find(
     (round) => round.id === state.activeRoundId,
   );
-  if (!activeRound) {
-    throw new Error('No active round');
-  }
+  invariant(activeRound, 'No active round');
 
   return activeRound;
 }
@@ -68,9 +72,7 @@ function withUpdatedRound(state: GameState, updated: RoundState): GameState {
 
 function getTeamById(state: GameState, teamId: string): Team {
   const team = state.teams.find((candidate) => candidate.id === teamId);
-  if (!team) {
-    throw new Error(`Unknown team id: ${teamId}`);
-  }
+  invariant(team, `Unknown team id: ${teamId}`);
 
   return team;
 }
@@ -132,13 +134,12 @@ function getWinnerTeamByTotalScore(teams: Team[]): string | null {
 
 function createRound(state: GameState, nowMs: number): RoundState {
   const activeTeamId = state.activeTeamId;
-  if (!activeTeamId) {
-    throw new Error('No active team id');
-  }
+  invariant(activeTeamId, 'No active team id');
 
   const team = getTeamById(state, activeTeamId);
   const playerPointer = state.activePlayerByTeam[team.id] ?? 0;
-  const clueGiverPlayerId = team.playerIds[playerPointer] ?? '';
+  const clueGiverPlayerId = team.playerIds[playerPointer];
+  invariant(clueGiverPlayerId, 'No clue giver available for active team');
 
   return {
     id: `r${state.rounds.length + 1}`,
@@ -152,7 +153,62 @@ function createRound(state: GameState, nowMs: number): RoundState {
   };
 }
 
+function validateInput(input: NewGameInput): void {
+  invariant(input.teamAName.trim().length > 0, 'Team A name is required');
+  invariant(input.teamBName.trim().length > 0, 'Team B name is required');
+  invariant(input.teamAPlayers.length > 0, 'Team A needs at least one player');
+  invariant(input.teamBPlayers.length > 0, 'Team B needs at least one player');
+}
+
+function assertActionAllowed(state: GameState, action: GameAction): void {
+  switch (action.type) {
+    case 'ROUND_START':
+      invariant(
+        state.phase === 'ready',
+        `ROUND_START requires phase=ready, received ${state.phase}`,
+      );
+      break;
+    case 'WORD_GUESSED':
+    case 'WORD_SKIPPED':
+      invariant(
+        state.phase === 'round_active',
+        `${action.type} requires phase=round_active, received ${state.phase}`,
+      );
+      invariant(
+        Boolean(state.bowl.activeWordId),
+        `${action.type} requires an active word`,
+      );
+      break;
+    case 'ROUND_END':
+      invariant(
+        state.phase === 'round_active',
+        `ROUND_END requires phase=round_active, received ${state.phase}`,
+      );
+      invariant(
+        Boolean(state.activeTeamId),
+        'ROUND_END requires an active team',
+      );
+      break;
+    case 'NEXT_ROUND':
+      invariant(
+        state.phase === 'round_summary',
+        `NEXT_ROUND requires phase=round_summary, received ${state.phase}`,
+      );
+      break;
+    case 'NEXT_SECTION':
+      invariant(
+        state.phase === 'section_transition',
+        `NEXT_SECTION requires phase=section_transition, received ${state.phase}`,
+      );
+      break;
+    default:
+      break;
+  }
+}
+
 export function createInitialGameState(input: NewGameInput): GameState {
+  validateInput(input);
+
   const teamA = createTeam('team-a', input.teamAName.trim());
   const teamB = createTeam('team-b', input.teamBName.trim());
 
@@ -189,6 +245,8 @@ export function createInitialGameState(input: NewGameInput): GameState {
     });
   });
 
+  invariant(allWordIds.length > 0, 'Game requires at least one word');
+
   const shuffled = shuffle(allWordIds);
   const firstDraw = drawNextWord(shuffled);
 
@@ -216,12 +274,10 @@ export function createInitialGameState(input: NewGameInput): GameState {
 }
 
 export function reduceGame(state: GameState, action: GameAction): GameState {
+  assertActionAllowed(state, action);
+
   switch (action.type) {
     case 'ROUND_START': {
-      if (state.phase !== 'ready') {
-        return state;
-      }
-
       const round = createRound(state, action.nowMs);
       return {
         ...state,
@@ -232,14 +288,13 @@ export function reduceGame(state: GameState, action: GameAction): GameState {
     }
 
     case 'WORD_GUESSED': {
-      if (state.phase !== 'round_active' || !state.bowl.activeWordId) {
-        return state;
-      }
-
       const round = getActiveRound(state);
+      const activeWordId = state.bowl.activeWordId;
+      invariant(activeWordId, 'No active word to mark as guessed');
+
       const updatedRound: RoundState = {
         ...round,
-        guessedWordIds: [...round.guessedWordIds, state.bowl.activeWordId],
+        guessedWordIds: [...round.guessedWordIds, activeWordId],
       };
 
       const next = drawNextWord(state.bowl.drawPile);
@@ -248,7 +303,7 @@ export function reduceGame(state: GameState, action: GameAction): GameState {
           ...state,
           bowl: {
             ...state.bowl,
-            guessedPile: [...state.bowl.guessedPile, state.bowl.activeWordId],
+            guessedPile: [...state.bowl.guessedPile, activeWordId],
             activeWordId: next.activeWordId,
             drawPile: next.drawPile,
           },
@@ -258,18 +313,15 @@ export function reduceGame(state: GameState, action: GameAction): GameState {
     }
 
     case 'WORD_SKIPPED': {
-      if (state.phase !== 'round_active' || !state.bowl.activeWordId) {
-        return state;
-      }
-
       const round = getActiveRound(state);
       const skippedWordId = state.bowl.activeWordId;
+      invariant(skippedWordId, 'No active word to skip');
+
       const updatedRound: RoundState = {
         ...round,
         skippedWordIds: [...round.skippedWordIds, skippedWordId],
       };
 
-      // Immediate re-entry with at least one word in front, plus order randomization.
       const reentryTail = shuffle([...state.bowl.drawPile, skippedWordId]);
       const nextActive = reentryTail[0] ?? null;
       const rest = reentryTail.slice(1);
@@ -288,17 +340,16 @@ export function reduceGame(state: GameState, action: GameAction): GameState {
     }
 
     case 'ROUND_END': {
-      if (state.phase !== 'round_active' || !state.activeTeamId) {
-        return state;
-      }
-
       const round = getActiveRound(state);
       const finalizedRound: RoundState = {
         ...round,
         endReason: action.reason,
       };
 
-      const activeTeam = getTeamById(state, state.activeTeamId);
+      const activeTeamId = state.activeTeamId;
+      invariant(activeTeamId, 'No active team when ending round');
+
+      const activeTeam = getTeamById(state, activeTeamId);
       const updatedTeams = incrementTeamScores(
         state,
         activeTeam.id,
@@ -373,10 +424,6 @@ export function reduceGame(state: GameState, action: GameAction): GameState {
     }
 
     case 'NEXT_SECTION': {
-      if (state.phase !== 'section_transition') {
-        return state;
-      }
-
       return {
         ...state,
         phase: 'ready',
@@ -384,10 +431,6 @@ export function reduceGame(state: GameState, action: GameAction): GameState {
     }
 
     case 'NEXT_ROUND': {
-      if (state.phase !== 'round_summary') {
-        return state;
-      }
-
       const round = createRound(state, action.nowMs);
       return {
         ...state,
