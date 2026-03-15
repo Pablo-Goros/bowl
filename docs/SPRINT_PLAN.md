@@ -56,7 +56,7 @@ Each milestone is split into smaller sprints with explicit outcomes.
 
 **Goal:** Implement testable game logic independent of UI.
 
-**Status:** 🚧 In progress. Initial skeleton implemented in `lib/game-engine/` (types, reducer, actions, selectors, fixtures).
+**Status:** ✅ Completed. Engine invariants, selectors, and baseline transition flow are implemented in `lib/game-engine/`.
 
 **Tasks**
 
@@ -82,6 +82,8 @@ Each milestone is split into smaller sprints with explicit outcomes.
 ### Sprint 0.3 — Test Harness + UI Skeleton
 
 **Goal:** Ensure confidence early and create navigation scaffold.
+
+**Status:** ✅ Completed. Added executable engine tests and clickable mobile-first route placeholders for the full flow.
 
 **Tasks**
 
