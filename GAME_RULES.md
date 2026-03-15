@@ -39,14 +39,20 @@ The game is divided into three sections. Each section consists of multiple round
 ## Scoring:
 
 - 1 point per word guessed correctly
-- Points accumulate across all rounds
+- Keep score for each section and for the full match
 
 ## Winning:
 
-- Team with the most total points after all three sections wins
-- In case of a tie, play one final bonus round with remaining words
+- Team with the most total points after all 3 sections wins the match
+- Keep section scores for transparency, but total points decide the winner
+- If total points are tied, play sudden-death rounds until one team outscores the other in a full alternation cycle
 
 ## Important:
 
 - If at any moment during a round, a person makes filler noises such as "uh", "ummmm", or a long "hmmmm...", the round ends immediately and the BOWL passes to the other team
-- One word means one word. Things like "Star Wars" or "Credit card" are two words, so they are not valid
+- If a word is skipped, it re-enters the bowl immediately, shuffled among the remaining words, with at least one different word before it
+- The bowl order is reshuffled between rounds
+- One word means one word:
+  - Apostrophes count as one word (`don't` is valid)
+  - Hyphenated terms count as two words (`ice-cream` is invalid)
+  - Multi-word phrases are invalid (`Star Wars`, `credit card`)
