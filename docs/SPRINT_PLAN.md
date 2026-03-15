@@ -115,6 +115,8 @@ Each milestone is split into smaller sprints with explicit outcomes.
 
 **Goal:** Create game session with teams and players quickly.
 
+**Status:** ✅ Completed. Setup form now validates teams/players, supports add/remove player controls, provides balance suggestions, and passes session draft data into word entry.
+
 **Tasks**
 
 - Build setup form with validation:
