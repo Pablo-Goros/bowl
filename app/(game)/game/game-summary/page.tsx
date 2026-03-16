@@ -1,15 +1,82 @@
+'use client';
+
 import Link from 'next/link';
+import { useMemo } from 'react';
+import { useRouter } from 'next/navigation';
+
+import { Button } from '@/components/ui/button';
+import { getScoreboard } from '@/lib/game-engine';
+import {
+  clearStoredGameState,
+  loadGameStateFromStorage,
+} from '@/lib/game-session';
 
 export default function GameSummaryPage() {
+  const router = useRouter();
+  const state = useMemo(() => loadGameStateFromStorage(), []);
+  const scoreboard = state ? getScoreboard(state) : null;
+  const winnerName =
+    state && state.winnerTeamId
+      ? (state.teams.find((team) => team.id === state.winnerTeamId)?.name ??
+        state.winnerTeamId)
+      : null;
+
+  function handleNewGame() {
+    clearStoredGameState();
+    router.push('/game/setup');
+  }
+
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-4 px-4 py-8">
-      <h1 className="text-2xl font-semibold">Game summary</h1>
-      <p className="text-sm text-muted-foreground">
-        Placeholder for final totals and winner.
-      </p>
-      <Link className="rounded-lg border px-4 py-3" href="/">
-        Return home
-      </Link>
+      <header className="space-y-2">
+        <h1 className="text-2xl font-semibold">Game summary</h1>
+        <p className="text-sm text-muted-foreground">
+          Final totals for the completed match.
+        </p>
+      </header>
+
+      {state ? (
+        <>
+          {winnerName ? (
+            <section className="rounded-lg border p-4">
+              <p className="text-sm text-muted-foreground">Winner</p>
+              <p className="text-2xl font-semibold">{winnerName}</p>
+            </section>
+          ) : null}
+
+          {scoreboard ? (
+            <section className="rounded-lg border p-4 text-sm">
+              <p className="text-base font-medium">Total score</p>
+              <ul className="mt-3 space-y-1">
+                {Object.entries(scoreboard).map(([teamName, points]) => (
+                  <li
+                    className="flex items-center justify-between"
+                    key={teamName}
+                  >
+                    <span>{teamName}</span>
+                    <span className="font-semibold">{points}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+        </>
+      ) : (
+        <section className="rounded-lg border p-4">
+          <p className="text-sm">
+            No completed match detected. Finish a session to see results.
+          </p>
+        </section>
+      )}
+
+      <div className="mt-4 flex flex-col gap-2">
+        <Button className="w-full" onClick={handleNewGame}>
+          Start new game
+        </Button>
+        <Button asChild variant="ghost" className="w-full">
+          <Link href="/">Return home</Link>
+        </Button>
+      </div>
     </main>
   );
 }

@@ -27,7 +27,13 @@ export default function WordEntryPage() {
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-4 px-4 py-8">
       <h1 className="text-2xl font-semibold">Word entry</h1>
       <p className="text-sm text-muted-foreground">
-        Sprint 1.1 bridge complete. Setup is captured and passed into this step.
+        Sprint 1.1 bridge complete. Setup is captured and handed off to word
+        entry.
+      </p>
+      <p className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
+        The detailed word entry flow is still under construction. For now, each
+        player receives auto-generated practice words so you can exercise the
+        new round loop (Sprint 1.3).
       </p>
 
       {draft ? (
@@ -50,7 +56,7 @@ export default function WordEntryPage() {
         <Link href="/game/setup">Back to setup</Link>
       </Button>
       <Button asChild>
-        <Link href="/game/round">Continue to round placeholder</Link>
+        <Link href="/game/round">Continue to round flow</Link>
       </Button>
     </main>
   );

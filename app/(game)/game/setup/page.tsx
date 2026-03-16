@@ -13,6 +13,9 @@ import {
 import {
   serializeSetupDraft,
   SETUP_DRAFT_STORAGE_KEY,
+  clearStoredGameState,
+  loadSetupDraftFromStorage,
+  saveNewGameInputToStorage,
   toNewGameInputFromSetup,
 } from '@/lib/game-session';
 
@@ -46,7 +49,10 @@ function updatePlayer(
 
 export default function SetupPage() {
   const router = useRouter();
-  const [draft, setDraft] = useState<SetupDraft>(defaultDraft);
+  const [draft, setDraft] = useState<SetupDraft>(() => {
+    const stored = loadSetupDraftFromStorage();
+    return stored ?? defaultDraft;
+  });
   const [errors, setErrors] = useState<string[]>([]);
 
   const balanceSuggestion = useMemo(() => getBalanceSuggestion(draft), [draft]);
@@ -88,10 +94,8 @@ export default function SetupPage() {
       SETUP_DRAFT_STORAGE_KEY,
       serializeSetupDraft(normalized),
     );
-    window.sessionStorage.setItem(
-      'bowl.new-game-input.v1',
-      JSON.stringify(sessionInput),
-    );
+    saveNewGameInputToStorage(sessionInput);
+    clearStoredGameState();
 
     setErrors([]);
     router.push('/game/word-entry');
