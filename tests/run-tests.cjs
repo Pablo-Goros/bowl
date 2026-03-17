@@ -6,7 +6,12 @@ const ts = require('typescript');
 
 const originalResolveFilename = Module._resolveFilename;
 
-Module._resolveFilename = function resolveFilename(request, parent, isMain, options) {
+Module._resolveFilename = function resolveFilename(
+  request,
+  parent,
+  isMain,
+  options,
+) {
   try {
     return originalResolveFilename.call(this, request, parent, isMain, options);
   } catch (error) {
