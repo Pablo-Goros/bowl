@@ -1,4 +1,5 @@
 import type { GameAction } from './actions';
+import { MAX_WORDS_PER_PLAYER, MIN_WORDS_PER_PLAYER } from './setup';
 import type {
   GameState,
   NewGameInput,
@@ -227,6 +228,11 @@ function validateInput(input: NewGameInput): void {
   );
   invariant(input.teamAPlayers.length > 0, 'Team A needs at least one player');
   invariant(input.teamBPlayers.length > 0, 'Team B needs at least one player');
+  invariant(
+    input.wordsPerPlayer >= MIN_WORDS_PER_PLAYER &&
+      input.wordsPerPlayer <= MAX_WORDS_PER_PLAYER,
+    `Words per player must be between ${MIN_WORDS_PER_PLAYER} and ${MAX_WORDS_PER_PLAYER}`,
+  );
 
   const hasDuplicate = (players: string[]) =>
     new Set(players.map((name) => name.trim().toLocaleLowerCase())).size !==

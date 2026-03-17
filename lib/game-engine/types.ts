@@ -72,5 +72,6 @@ export interface NewGameInput {
   teamBName: string;
   teamAPlayers: string[];
   teamBPlayers: string[];
+  wordsPerPlayer: number;
   wordsByPlayer: Record<string, string[]>;
 }

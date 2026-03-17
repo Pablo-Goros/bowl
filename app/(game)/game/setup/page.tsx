@@ -5,6 +5,9 @@ import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
 import {
+  DEFAULT_WORDS_PER_PLAYER,
+  MAX_WORDS_PER_PLAYER,
+  MIN_WORDS_PER_PLAYER,
   getBalanceSuggestion,
   normalizeSetupDraft,
   validateSetupDraft,
@@ -28,6 +31,7 @@ const defaultDraft: SetupDraft = {
     name: '',
     players: [''],
   },
+  wordsPerPlayer: DEFAULT_WORDS_PER_PLAYER,
 };
 
 function updatePlayer(
@@ -109,6 +113,36 @@ export default function SetupPage() {
           Add team names and players to create a session.
         </p>
       </header>
+
+      <section className="space-y-4 rounded-lg border p-4">
+        <label className="flex flex-col gap-2 text-sm">
+          Words per player
+          <select
+            className="rounded-md border px-3 py-2"
+            value={draft.wordsPerPlayer}
+            onChange={(event) =>
+              setDraft((previous) => ({
+                ...previous,
+                wordsPerPlayer: Number(event.target.value),
+              }))
+            }
+          >
+            {Array.from(
+              { length: MAX_WORDS_PER_PLAYER - MIN_WORDS_PER_PLAYER + 1 },
+              (_, index) => MIN_WORDS_PER_PLAYER + index,
+            ).map((count) => (
+              <option key={count} value={count}>
+                {count} words
+                {count === DEFAULT_WORDS_PER_PLAYER ? ' (recommended)' : ''}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="text-xs text-muted-foreground">
+          Every player will enter exactly {draft.wordsPerPlayer} words before
+          the game starts.
+        </p>
+      </section>
 
       <section className="space-y-4 rounded-lg border p-4">
         <label className="flex flex-col gap-2 text-sm">

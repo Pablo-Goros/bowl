@@ -41,6 +41,7 @@ export default function RoundPage() {
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const [autoEndedRoundId, setAutoEndedRoundId] = useState<string | null>(null);
+  const [revealedWordId, setRevealedWordId] = useState<string | null>(null);
 
   useEffect(() => {
     const storedState = loadGameStateFromStorage();
@@ -170,6 +171,7 @@ export default function RoundPage() {
   useEffect(() => {
     if (phase !== 'round_active') {
       setAutoEndedRoundId(null);
+      setRevealedWordId(null);
       return;
     }
 
@@ -184,6 +186,18 @@ export default function RoundPage() {
     setAutoEndedRoundId(activeRoundId);
     applyAction({ type: 'ROUND_END', reason: 'timer' });
   }, [activeRoundId, autoEndedRoundId, applyAction, phase, remainingSeconds]);
+
+  useEffect(() => {
+    if (phase !== 'round_active' || !activeRound || !activeWord) {
+      setRevealedWordId(null);
+      return;
+    }
+
+    const wordsSeenThisRound =
+      activeRound.guessedWordIds.length + activeRound.skippedWordIds.length;
+
+    setRevealedWordId(wordsSeenThisRound === 0 ? activeWord.id : null);
+  }, [activeRound, activeWord, phase]);
 
   const cardClass = 'rounded-lg border p-4 space-y-3';
 
@@ -240,6 +254,8 @@ export default function RoundPage() {
   }
 
   function renderActiveState() {
+    const isWordVisible = activeWord && revealedWordId === activeWord.id;
+
     return (
       <>
         <section className="rounded-xl border p-6 text-center">
@@ -249,9 +265,25 @@ export default function RoundPage() {
           <p className="mt-4 text-7xl font-bold leading-none tabular-nums">
             {remainingSeconds}s
           </p>
-          <p className="mt-6 rounded-lg bg-muted px-4 py-8 text-4xl font-semibold leading-tight">
-            {activeWord?.text ?? 'No words remaining'}
-          </p>
+          {activeWord ? (
+            isWordVisible ? (
+              <p className="mt-6 rounded-lg bg-muted px-4 py-8 text-4xl font-semibold leading-tight">
+                {activeWord.text}
+              </p>
+            ) : (
+              <button
+                className="mt-6 w-full rounded-lg border border-dashed bg-muted/40 px-4 py-8 text-lg font-medium text-muted-foreground"
+                type="button"
+                onClick={() => setRevealedWordId(activeWord.id)}
+              >
+                Tap to reveal next word
+              </button>
+            )
+          ) : (
+            <p className="mt-6 rounded-lg bg-muted px-4 py-8 text-4xl font-semibold leading-tight">
+              No words remaining
+            </p>
+          )}
         </section>
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">

@@ -1,3 +1,7 @@
+export const MIN_WORDS_PER_PLAYER = 3;
+export const MAX_WORDS_PER_PLAYER = 5;
+export const DEFAULT_WORDS_PER_PLAYER = 4;
+
 export interface SetupTeamDraft {
   name: string;
   players: string[];
@@ -6,6 +10,7 @@ export interface SetupTeamDraft {
 export interface SetupDraft {
   teamA: SetupTeamDraft;
   teamB: SetupTeamDraft;
+  wordsPerPlayer: number;
 }
 
 export interface SetupValidationResult {
@@ -39,6 +44,10 @@ function getDuplicateNames(names: string[]): string[] {
 }
 
 export function normalizeSetupDraft(draft: SetupDraft): SetupDraft {
+  const wordsPerPlayer = Number.isInteger(draft.wordsPerPlayer)
+    ? draft.wordsPerPlayer
+    : DEFAULT_WORDS_PER_PLAYER;
+
   return {
     teamA: {
       name: draft.teamA.name.trim(),
@@ -48,6 +57,7 @@ export function normalizeSetupDraft(draft: SetupDraft): SetupDraft {
       name: draft.teamB.name.trim(),
       players: trimList(draft.teamB.players),
     },
+    wordsPerPlayer,
   };
 }
 
@@ -86,6 +96,15 @@ export function validateSetupDraft(draft: SetupDraft): SetupValidationResult {
 
   if (getDuplicateNames(normalized.teamB.players).length > 0) {
     errors.push('Team B player names must be unique within the team.');
+  }
+
+  if (
+    normalized.wordsPerPlayer < MIN_WORDS_PER_PLAYER ||
+    normalized.wordsPerPlayer > MAX_WORDS_PER_PLAYER
+  ) {
+    errors.push(
+      `Words per player must be between ${MIN_WORDS_PER_PLAYER} and ${MAX_WORDS_PER_PLAYER}.`,
+    );
   }
 
   return {
