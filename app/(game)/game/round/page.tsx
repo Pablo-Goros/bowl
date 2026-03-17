@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
+import { ConfirmToast } from '@/components/ui/confirm-toast';
 import {
   createInitialGameState,
   getActiveRound,
@@ -22,17 +23,42 @@ import {
   saveGameStateToStorage,
 } from '@/lib/game-session';
 
-function migrateLegacyState(state: GameState): GameState {
-  const phase = (state as { phase: string }).phase;
-  if (phase !== 'round_summary') {
-    return state;
+function migrateLegacyState(
+  state: GameState | Record<string, unknown>,
+): GameState {
+  const candidate = state as GameState & {
+    phase?: string;
+    suddenDeath?: GameState['suddenDeath'];
+  };
+
+  const phase = String(candidate.phase ?? 'ready');
+  const withCurrentPhase = {
+    ...candidate,
+    phase: phase === 'round_summary' ? 'ready' : candidate.phase,
+  };
+
+  if (withCurrentPhase.suddenDeath) {
+    return withCurrentPhase as GameState;
   }
 
   return {
-    ...state,
-    phase: 'ready',
+    ...(withCurrentPhase as GameState),
+    suddenDeath: {
+      active: false,
+      cycleScores: Object.fromEntries(
+        withCurrentPhase.teams.map((team) => [team.id, 0]),
+      ),
+      roundsPlayedInCycle: 0,
+    },
   };
 }
+
+type PendingConfirm = {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  onConfirm: () => void;
+} | null;
 
 export default function RoundPage() {
   const router = useRouter();
@@ -42,6 +68,7 @@ export default function RoundPage() {
   const [tick, setTick] = useState(0);
   const [autoEndedRoundId, setAutoEndedRoundId] = useState<string | null>(null);
   const [revealedWordId, setRevealedWordId] = useState<string | null>(null);
+  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm>(null);
 
   useEffect(() => {
     const storedState = loadGameStateFromStorage();
@@ -115,12 +142,22 @@ export default function RoundPage() {
     applyAction({ type: 'WORD_GUESSED' });
   }, [applyAction]);
 
+  const handleUndoLastGuessedWord = useCallback(() => {
+    applyAction({ type: 'UNDO_LAST_GUESSED_WORD' });
+  }, [applyAction]);
+
   const handleWordSkipped = useCallback(() => {
     applyAction({ type: 'WORD_SKIPPED' });
   }, [applyAction]);
 
   const handleEndRound = useCallback(() => {
-    applyAction({ type: 'ROUND_END', reason: 'manual_end' });
+    setPendingConfirm({
+      title: 'End round?',
+      description:
+        'This will stop the current timer and pass play to the other team.',
+      confirmLabel: 'End round',
+      onConfirm: () => applyAction({ type: 'ROUND_END', reason: 'manual_end' }),
+    });
   }, [applyAction]);
 
   const handleNextSection = useCallback(() => {
@@ -200,6 +237,16 @@ export default function RoundPage() {
   }, [activeRound, activeWord, phase]);
 
   const cardClass = 'rounded-lg border p-4 space-y-3';
+  const activeWordCardClass =
+    'mt-6 flex min-h-36 w-full items-center justify-center rounded-lg bg-muted px-4 py-8 text-center';
+
+  function getDisplaySection(): number | undefined {
+    if (state?.suddenDeath.active) {
+      return 4;
+    }
+
+    return state?.section;
+  }
 
   function getSectionRuleLabel(section: number | undefined): string {
     switch (section) {
@@ -209,6 +256,8 @@ export default function RoundPage() {
         return 'Give exactly one-word clues.';
       case 3:
         return 'Act it out with no speaking.';
+      case 4:
+        return 'Make a sound only.';
       default:
         return 'Follow the current section rules.';
     }
@@ -238,13 +287,17 @@ export default function RoundPage() {
     return (
       <section className={cardClass}>
         <p className="text-sm text-muted-foreground">
-          Section {state?.section} - 60-second turns
+          {state?.suddenDeath.active
+            ? 'Section 4 - sudden death'
+            : `Section ${state?.section} - 60-second turns`}
         </p>
         <p className="text-xl font-semibold">
           {currentTeam?.name ?? 'Next team'} is up.
         </p>
         <p className="text-sm text-muted-foreground">
-          Players decide who holds the phone for this round.
+          {state?.suddenDeath.active
+            ? 'Section 4 rule: make a sound only. Each team gets one round per cycle. If the cycle stays tied, the bowl resets and sudden death continues.'
+            : 'Players decide who holds the phone for this round.'}
         </p>
         <Button className="mt-4 w-full" onClick={handleRoundStart}>
           Start round
@@ -255,32 +308,39 @@ export default function RoundPage() {
 
   function renderActiveState() {
     const isWordVisible = activeWord && revealedWordId === activeWord.id;
+    const guessedThisRound = activeRound?.guessedWordIds.length ?? 0;
+    const canScoreActiveWord = Boolean(activeWord && isWordVisible);
 
     return (
       <>
         <section className="rounded-xl border p-6 text-center">
           <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-            Section {state?.section} - Team {activeRoundTeam?.name ?? 'Unknown'}
+            Section {getDisplaySection()} - Team{' '}
+            {activeRoundTeam?.name ?? 'Unknown'}
           </p>
           <p className="mt-4 text-7xl font-bold leading-none tabular-nums">
             {remainingSeconds}s
           </p>
           {activeWord ? (
             isWordVisible ? (
-              <p className="mt-6 rounded-lg bg-muted px-4 py-8 text-4xl font-semibold leading-tight">
+              <p
+                className={`${activeWordCardClass} text-4xl font-semibold leading-tight`}
+              >
                 {activeWord.text}
               </p>
             ) : (
               <button
-                className="mt-6 w-full rounded-lg border border-dashed bg-muted/40 px-4 py-8 text-lg font-medium text-muted-foreground"
+                className={`${activeWordCardClass} border border-dashed bg-muted/40 text-lg font-medium text-muted-foreground`}
                 type="button"
                 onClick={() => setRevealedWordId(activeWord.id)}
               >
-                Tap to reveal next word
+                Reveal next word
               </button>
             )
           ) : (
-            <p className="mt-6 rounded-lg bg-muted px-4 py-8 text-4xl font-semibold leading-tight">
+            <p
+              className={`${activeWordCardClass} text-4xl font-semibold leading-tight`}
+            >
               No words remaining
             </p>
           )}
@@ -290,7 +350,7 @@ export default function RoundPage() {
           <Button
             className="h-12 text-base"
             onClick={handleWordGuessed}
-            disabled={!activeWord}
+            disabled={!canScoreActiveWord}
           >
             Guessed
           </Button>
@@ -298,9 +358,17 @@ export default function RoundPage() {
             variant="secondary"
             className="h-12 text-base"
             onClick={handleWordSkipped}
-            disabled={!activeWord}
+            disabled={!canScoreActiveWord}
           >
             Skip
+          </Button>
+          <Button
+            variant="outline"
+            className="h-12 text-base sm:col-span-2"
+            onClick={handleUndoLastGuessedWord}
+            disabled={guessedThisRound === 0}
+          >
+            Undo last guessed word
           </Button>
           <Button
             variant="destructive"
@@ -315,6 +383,22 @@ export default function RoundPage() {
   }
 
   function renderSectionTransition() {
+    if (state?.suddenDeath.active) {
+      return (
+        <section className={cardClass}>
+          <p className="text-sm text-muted-foreground">Final score was tied.</p>
+          <p className="text-xl font-semibold">Section 4: sudden death.</p>
+          <p className="text-sm text-muted-foreground">
+            Rule: make a sound only. Teams alternate one round each. If the
+            cycle is still tied, the bowl resets and another cycle starts.
+          </p>
+          <Button className="w-full" onClick={handleNextSection}>
+            Continue to section 4
+          </Button>
+        </section>
+      );
+    }
+
     return (
       <section className={cardClass}>
         <p className="text-sm text-muted-foreground">
@@ -355,10 +439,17 @@ export default function RoundPage() {
   }
 
   function handleResetSession() {
-    clearStoredGameState();
-    setState(null);
-    setError(null);
-    router.push('/game/setup');
+    setPendingConfirm({
+      title: 'Reset session?',
+      description: 'This will clear the saved game and return to setup.',
+      confirmLabel: 'Reset',
+      onConfirm: () => {
+        clearStoredGameState();
+        setState(null);
+        setError(null);
+        router.push('/game/setup');
+      },
+    });
   }
 
   const canReviewWords = Boolean(state && state.rounds.length === 0);
@@ -424,6 +515,18 @@ export default function RoundPage() {
           Reset session
         </Button>
       </div>
+
+      <ConfirmToast
+        open={Boolean(pendingConfirm)}
+        title={pendingConfirm?.title ?? ''}
+        description={pendingConfirm?.description ?? ''}
+        confirmLabel={pendingConfirm?.confirmLabel}
+        onCancel={() => setPendingConfirm(null)}
+        onConfirm={() => {
+          pendingConfirm?.onConfirm();
+          setPendingConfirm(null);
+        }}
+      />
     </main>
   );
 }

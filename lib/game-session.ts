@@ -65,20 +65,20 @@ export function parseSetupDraft(raw: string): SetupDraft | null {
   }
 }
 
-function getSessionStorage(): Storage | null {
+function getBrowserStorage(): Storage | null {
   if (typeof window === 'undefined') {
     return null;
   }
 
   try {
-    return window.sessionStorage;
+    return window.localStorage;
   } catch {
     return null;
   }
 }
 
 export function loadSetupDraftFromStorage(): SetupDraft | null {
-  const storage = getSessionStorage();
+  const storage = getBrowserStorage();
   if (!storage) {
     return null;
   }
@@ -92,7 +92,7 @@ export function loadSetupDraftFromStorage(): SetupDraft | null {
 }
 
 export function saveNewGameInputToStorage(input: NewGameInput): void {
-  const storage = getSessionStorage();
+  const storage = getBrowserStorage();
   if (!storage) {
     return;
   }
@@ -101,7 +101,7 @@ export function saveNewGameInputToStorage(input: NewGameInput): void {
 }
 
 export function loadNewGameInputFromStorage(): NewGameInput | null {
-  const storage = getSessionStorage();
+  const storage = getBrowserStorage();
   if (!storage) {
     return null;
   }
@@ -123,7 +123,7 @@ export function loadNewGameInputFromStorage(): NewGameInput | null {
 }
 
 export function saveGameStateToStorage(state: GameState): void {
-  const storage = getSessionStorage();
+  const storage = getBrowserStorage();
   if (!storage) {
     return;
   }
@@ -132,7 +132,7 @@ export function saveGameStateToStorage(state: GameState): void {
 }
 
 export function loadGameStateFromStorage(): GameState | null {
-  const storage = getSessionStorage();
+  const storage = getBrowserStorage();
   if (!storage) {
     return null;
   }
@@ -150,7 +150,7 @@ export function loadGameStateFromStorage(): GameState | null {
 }
 
 export function clearStoredGameState(): void {
-  const storage = getSessionStorage();
+  const storage = getBrowserStorage();
   if (!storage) {
     return;
   }

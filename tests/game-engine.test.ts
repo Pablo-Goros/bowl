@@ -88,12 +88,90 @@ function testSelectors() {
   assert.equal(progress.guessedWordCount, 0);
 }
 
+function testUndoLastGuessedWord() {
+  const originalRandom = Math.random;
+  Math.random = () => 0;
+
+  let state = createInitialGameState(sampleGameInput);
+  const openingWordId = state.bowl.activeWordId;
+
+  state = reduceGame(state, { type: 'ROUND_START', nowMs: 1000 });
+  state = reduceGame(state, { type: 'WORD_GUESSED' });
+  state = reduceGame(state, { type: 'UNDO_LAST_GUESSED_WORD' });
+
+  assert.equal(state.rounds[0]?.guessedWordIds.length, 0);
+  assert.equal(state.bowl.guessedPile.length, 0);
+  assert.equal(state.bowl.activeWordId, openingWordId);
+
+  Math.random = originalRandom;
+}
+
+function testSuddenDeathBreaksFinalTie() {
+  const originalRandom = Math.random;
+  Math.random = () => 0;
+
+  let state = createInitialGameState({
+    teamAName: 'Team A',
+    teamBName: 'Team B',
+    teamAPlayers: ['Alex'],
+    teamBPlayers: ['Riley'],
+    wordsPerPlayer: 3,
+    wordsByPlayer: {
+      'team-a-p1': ['Moon', 'River', 'Lantern'],
+      'team-b-p1': ['Forest', 'Bridge', 'Anchor'],
+    },
+  });
+
+  for (let section = 1; section <= 3; section += 1) {
+    for (let round = 0; round < 5; round += 1) {
+      state = reduceGame(state, {
+        type: 'ROUND_START',
+        nowMs: section * 1000 + round,
+      });
+      state = reduceGame(state, { type: 'WORD_GUESSED' });
+      state = reduceGame(state, { type: 'ROUND_END', reason: 'manual_end' });
+    }
+
+    state = reduceGame(state, {
+      type: 'ROUND_START',
+      nowMs: section * 1000 + 99,
+    });
+    while (state.phase === 'round_active') {
+      state = reduceGame(state, { type: 'WORD_GUESSED' });
+    }
+
+    if (state.phase === 'section_transition' && !state.suddenDeath.active) {
+      state = reduceGame(state, {
+        type: 'NEXT_SECTION',
+        nowMs: section * 2000,
+      });
+    }
+  }
+
+  assert.equal(state.phase, 'section_transition');
+  assert.equal(state.suddenDeath.active, true);
+
+  state = reduceGame(state, { type: 'NEXT_SECTION', nowMs: 9999 });
+  state = reduceGame(state, { type: 'ROUND_START', nowMs: 10000 });
+  state = reduceGame(state, { type: 'WORD_GUESSED' });
+  state = reduceGame(state, { type: 'ROUND_END', reason: 'manual_end' });
+  state = reduceGame(state, { type: 'ROUND_START', nowMs: 10001 });
+  state = reduceGame(state, { type: 'ROUND_END', reason: 'manual_end' });
+
+  assert.equal(state.phase, 'match_complete');
+  assert.equal(state.winnerTeamId, 'team-a');
+
+  Math.random = originalRandom;
+}
+
 function run() {
   testInitialState();
   testRoundScoring();
   testSectionTransition();
   testInvariants();
   testSelectors();
+  testUndoLastGuessedWord();
+  testSuddenDeathBreaksFinalTie();
   console.log('game-engine tests passed');
 }
 

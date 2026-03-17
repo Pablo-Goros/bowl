@@ -51,6 +51,19 @@ function getFilledWordCount(words: string[] | undefined): number {
   return words?.map((word) => word.trim()).filter(Boolean).length ?? 0;
 }
 
+function getFirstIncompletePlayerIndex(
+  input: NewGameInput,
+  playerCards: PlayerCard[],
+): number {
+  const incompleteIndex = playerCards.findIndex(
+    (player) =>
+      getFilledWordCount(input.wordsByPlayer[player.key]) <
+      input.wordsPerPlayer,
+  );
+
+  return incompleteIndex === -1 ? 0 : incompleteIndex;
+}
+
 export default function WordEntryPage() {
   const router = useRouter();
   const [input, setInput] = useState<NewGameInput | null>(() =>
@@ -58,10 +71,16 @@ export default function WordEntryPage() {
   );
   const [errors, setErrors] = useState<string[]>([]);
   const [revealedFieldId, setRevealedFieldId] = useState<string | null>(null);
+  const [currentPlayerIndex, setCurrentPlayerIndex] = useState(0);
   const [roundsStarted] = useState(() => {
     const state = loadGameStateFromStorage();
     return Boolean(state && state.rounds.length > 0);
   });
+
+  const playerCards = useMemo(
+    () => (input ? buildPlayerCards(input) : []),
+    [input],
+  );
 
   useEffect(() => {
     if (!input || roundsStarted) {
@@ -71,10 +90,14 @@ export default function WordEntryPage() {
     saveNewGameInputToStorage(input);
   }, [input, roundsStarted]);
 
-  const playerCards = useMemo(
-    () => (input ? buildPlayerCards(input) : []),
-    [input],
-  );
+  const unmetRequirements = useMemo(() => {
+    if (!input) {
+      return ['No session data found. Complete setup first.'];
+    }
+
+    return validateWordsForGameInput(input);
+  }, [input]);
+
   const totalWords = useMemo(
     () =>
       playerCards.reduce((sum, player) => {
@@ -86,24 +109,43 @@ export default function WordEntryPage() {
       }, 0),
     [input, playerCards],
   );
-  const unmetRequirements = useMemo(() => {
-    if (!input) {
-      return ['No session data found. Complete setup first.'];
-    }
 
-    return validateWordsForGameInput(input);
-  }, [input]);
-  const canContinue =
-    Boolean(input) && (roundsStarted || unmetRequirements.length === 0);
+  const safeCurrentPlayerIndex =
+    playerCards.length === 0
+      ? 0
+      : Math.min(currentPlayerIndex, playerCards.length - 1);
+  const currentPlayer = playerCards[safeCurrentPlayerIndex] ?? null;
+  const currentWords =
+    input && currentPlayer
+      ? getWordSlots(
+          input.wordsByPlayer[currentPlayer.key],
+          input.wordsPerPlayer,
+        )
+      : [];
+  const currentPlayerComplete =
+    input && currentPlayer
+      ? getFilledWordCount(input.wordsByPlayer[currentPlayer.key]) >=
+        input.wordsPerPlayer
+      : false;
+  const allPlayersComplete = unmetRequirements.length === 0;
+  const canGoPrevious = safeCurrentPlayerIndex > 0;
+  const isLastPlayer = safeCurrentPlayerIndex === playerCards.length - 1;
+  const canGoNext =
+    roundsStarted ||
+    Boolean(
+      currentPlayer &&
+      currentPlayerComplete &&
+      (!isLastPlayer || allPlayersComplete),
+    );
 
-  function updateWord(playerKey: string, wordIndex: number, value: string) {
+  function updateWord(wordIndex: number, value: string) {
     setInput((previous) => {
-      if (!previous) {
+      if (!previous || !currentPlayer) {
         return previous;
       }
 
       const nextWords = getWordSlots(
-        previous.wordsByPlayer[playerKey],
+        previous.wordsByPlayer[currentPlayer.key],
         previous.wordsPerPlayer,
       );
       nextWords[wordIndex] = value;
@@ -112,10 +154,33 @@ export default function WordEntryPage() {
         ...previous,
         wordsByPlayer: {
           ...previous.wordsByPlayer,
-          [playerKey]: nextWords,
+          [currentPlayer.key]: nextWords,
         },
       };
     });
+  }
+
+  function moveToNextPlayer() {
+    if (!currentPlayer || !input) {
+      return;
+    }
+
+    if (!currentPlayerComplete && !roundsStarted) {
+      setErrors([
+        `Finish all ${input.wordsPerPlayer} entries for ${currentPlayer.playerName} before continuing.`,
+      ]);
+      return;
+    }
+
+    setErrors([]);
+    setRevealedFieldId(null);
+
+    if (safeCurrentPlayerIndex < playerCards.length - 1) {
+      setCurrentPlayerIndex((previous) => previous + 1);
+      return;
+    }
+
+    handleContinue();
   }
 
   function handleContinue() {
@@ -129,6 +194,11 @@ export default function WordEntryPage() {
 
     if (validationErrors.length > 0) {
       setErrors(validationErrors);
+      const firstIncompletePlayerIndex = getFirstIncompletePlayerIndex(
+        normalized,
+        playerCards,
+      );
+      setCurrentPlayerIndex(firstIncompletePlayerIndex);
       return;
     }
 
@@ -142,8 +212,8 @@ export default function WordEntryPage() {
       <header className="space-y-2">
         <h1 className="text-2xl font-semibold">Word entry</h1>
         <p className="text-sm text-muted-foreground">
-          Each player adds exactly {input?.wordsPerPlayer ?? 0} entries for the
-          shared bowl.
+          Pass the phone player by player and collect exactly{' '}
+          {input?.wordsPerPlayer ?? 0} entries from each person.
         </p>
       </header>
 
@@ -153,7 +223,7 @@ export default function WordEntryPage() {
         </p>
       ) : (
         <section className="rounded-xl border bg-muted/30 p-4 text-sm">
-          <p className="font-medium">Rule reminders</p>
+          <p className="font-medium">Word entry notes</p>
           <ul className="mt-2 space-y-1 text-muted-foreground">
             <li>
               Players can enter any words or phrases they want to play with.
@@ -162,7 +232,10 @@ export default function WordEntryPage() {
               Setup currently allows {MIN_WORDS_PER_PLAYER} to{' '}
               {MAX_WORDS_PER_PLAYER} words per player, with 4 recommended.
             </li>
-            <li>More entries make the full match longer.</li>
+            <li>
+              Entries are covered after typing so the next player cannot see
+              them.
+            </li>
           </ul>
         </section>
       )}
@@ -175,14 +248,16 @@ export default function WordEntryPage() {
         </ul>
       ) : null}
 
-      {input ? (
+      {input && currentPlayer ? (
         <>
           <section className="rounded-xl border p-4 text-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="font-medium">Session roster</p>
+                <p className="font-medium">
+                  Player {safeCurrentPlayerIndex + 1} of {playerCards.length}
+                </p>
                 <p className="text-muted-foreground">
-                  {input.teamAName} vs {input.teamBName}
+                  {currentPlayer.playerName} - {currentPlayer.teamName}
                 </p>
               </div>
               <div className="text-right">
@@ -197,90 +272,67 @@ export default function WordEntryPage() {
             </div>
           </section>
 
-          <div className="space-y-4">
-            {playerCards.map((player) => {
-              const filledWordCount = getFilledWordCount(
-                input.wordsByPlayer[player.key],
-              );
-              const slots = getWordSlots(
-                input.wordsByPlayer[player.key],
-                input.wordsPerPlayer,
-              );
+          <section className="rounded-xl border p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-medium">{currentPlayer.playerName}</p>
+                <p className="text-sm text-muted-foreground">
+                  Hand the phone to this player only.
+                </p>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {getFilledWordCount(input.wordsByPlayer[currentPlayer.key])}/
+                {input.wordsPerPlayer}
+              </p>
+            </div>
 
-              return (
-                <section className="rounded-xl border p-4" key={player.key}>
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-medium">{player.playerName}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {player.teamName}
-                      </p>
-                    </div>
-                    <p className="text-sm text-muted-foreground">
-                      {filledWordCount}/{input.wordsPerPlayer}
-                    </p>
-                  </div>
+            <div className="mt-4 space-y-2">
+              {currentWords.map((word, wordIndex) => {
+                const fieldId = `${currentPlayer.key}-${wordIndex}`;
+                const isRevealed = revealedFieldId === fieldId;
 
-                  <div className="mt-4 space-y-2">
-                    {slots.map((word, wordIndex) => {
-                      const fieldId = `${player.key}-${wordIndex}`;
-                      const isRevealed = revealedFieldId === fieldId;
+                return (
+                  <label
+                    className="flex items-center gap-3 text-sm"
+                    key={fieldId}
+                  >
+                    <span className="w-5 text-right text-xs text-muted-foreground">
+                      {wordIndex + 1}
+                    </span>
 
-                      return (
-                        <label
-                          className="flex items-center gap-3 text-sm"
-                          key={fieldId}
-                        >
-                          <span className="w-5 text-right text-xs text-muted-foreground">
-                            {wordIndex + 1}
-                          </span>
-
-                          {word && !isRevealed ? (
-                            <button
-                              className="flex flex-1 items-center justify-between rounded-md border border-dashed px-3 py-2 text-left text-muted-foreground"
-                              type="button"
-                              onClick={() => setRevealedFieldId(fieldId)}
-                              disabled={roundsStarted}
-                            >
-                              <span>
-                                {'•'.repeat(Math.max(word.trim().length, 6))}
-                              </span>
-                              <span className="text-xs uppercase tracking-[0.2em]">
-                                Reveal
-                              </span>
-                            </button>
-                          ) : (
-                            <input
-                              autoFocus={isRevealed}
-                              className="flex-1 rounded-md border px-3 py-2"
-                              placeholder={`Word ${wordIndex + 1}`}
-                              value={word}
-                              onBlur={() => setRevealedFieldId(null)}
-                              onChange={(event) =>
-                                updateWord(
-                                  player.key,
-                                  wordIndex,
-                                  event.target.value,
-                                )
-                              }
-                              onFocus={() => setRevealedFieldId(fieldId)}
-                              disabled={roundsStarted}
-                            />
-                          )}
-                        </label>
-                      );
-                    })}
-                  </div>
-
-                  <p className="mt-3 text-xs text-muted-foreground">
-                    {filledWordCount < input.wordsPerPlayer
-                      ? `${input.wordsPerPlayer - filledWordCount} more word${input.wordsPerPlayer - filledWordCount === 1 ? '' : 's'} needed before the game can start.`
-                      : 'Ready for round play.'}
-                  </p>
-                </section>
-              );
-            })}
-          </div>
+                    {word && !isRevealed ? (
+                      <button
+                        className="flex h-11 flex-1 items-center justify-between rounded-md border border-dashed px-3 py-2 text-left text-muted-foreground"
+                        type="button"
+                        onClick={() => setRevealedFieldId(fieldId)}
+                        disabled={roundsStarted}
+                      >
+                        <span>
+                          {'*'.repeat(Math.max(word.trim().length, 6))}
+                        </span>
+                        <span className="text-xs uppercase tracking-[0.2em]">
+                          Reveal
+                        </span>
+                      </button>
+                    ) : (
+                      <input
+                        autoFocus={isRevealed || wordIndex === 0}
+                        className="h-11 flex-1 rounded-md border px-3 py-2"
+                        placeholder={`Entry ${wordIndex + 1}`}
+                        value={word}
+                        onBlur={() => setRevealedFieldId(null)}
+                        onChange={(event) =>
+                          updateWord(wordIndex, event.target.value)
+                        }
+                        onFocus={() => setRevealedFieldId(fieldId)}
+                        disabled={roundsStarted}
+                      />
+                    )}
+                  </label>
+                );
+              })}
+            </div>
+          </section>
         </>
       ) : (
         <section className="rounded-lg border p-4 text-sm text-muted-foreground">
@@ -292,9 +344,36 @@ export default function WordEntryPage() {
         <Button asChild variant="outline">
           <Link href="/game/setup">Back to setup</Link>
         </Button>
-        <Button type="button" onClick={handleContinue} disabled={!canContinue}>
-          {roundsStarted ? 'Return to round flow' : 'Save words and continue'}
-        </Button>
+
+        {input && currentPlayer ? (
+          <>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                setErrors([]);
+                setRevealedFieldId(null);
+                setCurrentPlayerIndex((previous) => previous - 1);
+              }}
+              disabled={!canGoPrevious}
+            >
+              Previous player
+            </Button>
+            <Button
+              type="button"
+              onClick={moveToNextPlayer}
+              disabled={!canGoNext}
+            >
+              {isLastPlayer
+                ? roundsStarted
+                  ? 'Return to round flow'
+                  : allPlayersComplete
+                    ? 'Save words and continue'
+                    : 'Finish final player'
+                : 'Save and pass to next player'}
+            </Button>
+          </>
+        ) : null}
       </div>
     </main>
   );

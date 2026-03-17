@@ -94,7 +94,7 @@ export default function SetupPage() {
     }
 
     const sessionInput = toNewGameInputFromSetup(normalized);
-    window.sessionStorage.setItem(
+    window.localStorage.setItem(
       SETUP_DRAFT_STORAGE_KEY,
       serializeSetupDraft(normalized),
     );

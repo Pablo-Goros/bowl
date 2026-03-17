@@ -53,6 +53,12 @@ export interface SectionScore {
   winnerTeamId: string | null;
 }
 
+export interface SuddenDeathState {
+  active: boolean;
+  cycleScores: Record<string, number>;
+  roundsPlayedInCycle: number;
+}
+
 export interface GameState {
   phase: MatchPhase;
   section: SectionId;
@@ -65,6 +71,7 @@ export interface GameState {
   activeRoundId: string | null;
   activeTeamId: string | null;
   winnerTeamId: string | null;
+  suddenDeath: SuddenDeathState;
 }
 
 export interface NewGameInput {

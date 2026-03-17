@@ -129,6 +129,40 @@ function getWinnerTeamByTotalScore(teams: Team[]): string | null {
   return null;
 }
 
+function createEmptySuddenDeathState(teamIds: string[]) {
+  return {
+    active: false,
+    cycleScores: Object.fromEntries(teamIds.map((teamId) => [teamId, 0])),
+    roundsPlayedInCycle: 0,
+  };
+}
+
+function resetBowlFromAllWords(state: GameState): GameState {
+  const refreshedWords = shuffle(Object.keys(state.words));
+  const nextRoundDraw = drawNextWord(refreshedWords);
+
+  return {
+    ...state,
+    bowl: {
+      drawPile: nextRoundDraw.drawPile,
+      guessedPile: [],
+      activeWordId: nextRoundDraw.activeWordId,
+    },
+  };
+}
+
+function startSuddenDeath(state: GameState): GameState {
+  return resetBowlFromAllWords({
+    ...state,
+    phase: 'section_transition',
+    suddenDeath: {
+      active: true,
+      cycleScores: Object.fromEntries(state.teams.map((team) => [team.id, 0])),
+      roundsPlayedInCycle: 0,
+    },
+  });
+}
+
 function finalizeRound(
   state: GameState,
   finalizedRound: RoundState,
@@ -169,6 +203,60 @@ function finalizeRound(
     finalizedRound,
   );
 
+  if (state.suddenDeath.active) {
+    const cycleScores = {
+      ...state.suddenDeath.cycleScores,
+      [activeTeam.id]:
+        (state.suddenDeath.cycleScores[activeTeam.id] ?? 0) +
+        finalizedRound.guessedWordIds.length,
+    };
+    const roundsPlayedInCycle = state.suddenDeath.roundsPlayedInCycle + 1;
+
+    if (roundsPlayedInCycle < state.teams.length) {
+      return {
+        ...base,
+        suddenDeath: {
+          active: true,
+          cycleScores,
+          roundsPlayedInCycle,
+        },
+      };
+    }
+
+    const sortedCycleScores = [...state.teams]
+      .map((team) => ({
+        teamId: team.id,
+        score: cycleScores[team.id] ?? 0,
+      }))
+      .sort((a, b) => b.score - a.score);
+
+    if (
+      (sortedCycleScores[0]?.score ?? 0) !== (sortedCycleScores[1]?.score ?? 0)
+    ) {
+      return {
+        ...base,
+        phase: 'match_complete',
+        winnerTeamId: sortedCycleScores[0]?.teamId ?? null,
+        suddenDeath: {
+          active: true,
+          cycleScores,
+          roundsPlayedInCycle,
+        },
+      };
+    }
+
+    return resetBowlFromAllWords({
+      ...base,
+      suddenDeath: {
+        active: true,
+        cycleScores: Object.fromEntries(
+          state.teams.map((team) => [team.id, 0]),
+        ),
+        roundsPlayedInCycle: 0,
+      },
+    });
+  }
+
   if (base.bowl.activeWordId || base.bowl.drawPile.length > 0) {
     return base;
   }
@@ -178,26 +266,27 @@ function finalizeRound(
   const next = nextSection(base.section);
 
   if (!next) {
-    return {
+    const winnerTeamId = getWinnerTeamByTotalScore(base.teams);
+    if (winnerTeamId) {
+      return {
+        ...base,
+        phase: 'match_complete',
+        sectionScores: allSectionScores,
+        winnerTeamId,
+      };
+    }
+
+    return startSuddenDeath({
       ...base,
-      phase: 'match_complete',
       sectionScores: allSectionScores,
-      winnerTeamId: getWinnerTeamByTotalScore(base.teams),
-    };
+    });
   }
 
-  const refreshedWords = shuffle(Object.keys(base.words));
-  const nextRoundDraw = drawNextWord(refreshedWords);
   return {
-    ...base,
+    ...resetBowlFromAllWords(base),
     phase: 'section_transition',
     section: next,
     sectionScores: allSectionScores,
-    bowl: {
-      drawPile: nextRoundDraw.drawPile,
-      guessedPile: [],
-      activeWordId: nextRoundDraw.activeWordId,
-    },
   };
 }
 
@@ -265,6 +354,20 @@ function assertActionAllowed(state: GameState, action: GameAction): void {
       invariant(
         Boolean(state.bowl.activeWordId),
         `${action.type} requires an active word`,
+      );
+      break;
+    case 'UNDO_LAST_GUESSED_WORD':
+      invariant(
+        state.phase === 'round_active',
+        `UNDO_LAST_GUESSED_WORD requires phase=round_active, received ${state.phase}`,
+      );
+      invariant(
+        Boolean(state.activeRoundId),
+        'UNDO_LAST_GUESSED_WORD requires an active round',
+      );
+      invariant(
+        (getActiveRound(state).guessedWordIds.length ?? 0) > 0,
+        'UNDO_LAST_GUESSED_WORD requires a guessed word',
       );
       break;
     case 'ROUND_END':
@@ -351,6 +454,7 @@ export function createInitialGameState(input: NewGameInput): GameState {
     activeRoundId: null,
     activeTeamId: teamA.id,
     winnerTeamId: null,
+    suddenDeath: createEmptySuddenDeathState([teamA.id, teamB.id]),
   };
 }
 
@@ -403,6 +507,41 @@ export function reduceGame(state: GameState, action: GameAction): GameState {
         ...updatedRound,
         endReason: 'all_words',
       });
+    }
+
+    case 'UNDO_LAST_GUESSED_WORD': {
+      const round = getActiveRound(state);
+      const restoredWordId =
+        round.guessedWordIds[round.guessedWordIds.length - 1];
+      invariant(restoredWordId, 'No guessed word to undo');
+
+      const updatedRound: RoundState = {
+        ...round,
+        guessedWordIds: round.guessedWordIds.slice(0, -1),
+      };
+
+      const nextDrawPile = state.bowl.activeWordId
+        ? [state.bowl.activeWordId, ...state.bowl.drawPile]
+        : [...state.bowl.drawPile];
+
+      return withUpdatedRound(
+        {
+          ...state,
+          bowl: {
+            ...state.bowl,
+            activeWordId: restoredWordId,
+            drawPile: nextDrawPile,
+            guessedPile: state.bowl.guessedPile.filter(
+              (wordId, index) =>
+                !(
+                  wordId === restoredWordId &&
+                  index === state.bowl.guessedPile.lastIndexOf(restoredWordId)
+                ),
+            ),
+          },
+        },
+        updatedRound,
+      );
     }
 
     case 'WORD_SKIPPED': {

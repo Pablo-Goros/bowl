@@ -53,3 +53,14 @@ export function getSectionScoreByTeamName(
     state.teams.map((team) => [team.name, scoreByTeamId[team.id] ?? 0]),
   );
 }
+
+export function getSuddenDeathScoreByTeamName(
+  state: GameState,
+): Record<string, number> {
+  return Object.fromEntries(
+    state.teams.map((team) => [
+      team.name,
+      state.suddenDeath.cycleScores[team.id] ?? 0,
+    ]),
+  );
+}
