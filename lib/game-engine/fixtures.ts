@@ -6,9 +6,9 @@ export const sampleGameInput: NewGameInput = {
   teamAPlayers: ['Alex', 'Sam'],
   teamBPlayers: ['Riley', 'Jamie'],
   wordsByPlayer: {
-    'Team A::Alex': ['Moon', 'Swim', 'Banana'],
-    'Team A::Sam': ['Pizza', 'Dance', 'Hammer'],
-    'Team B::Riley': ['Garden', 'Run', 'Lion'],
-    'Team B::Jamie': ['Rocket', 'Sing', 'Doctor'],
+    'team-a-p1': ['Moon', 'Swim', 'Banana'],
+    'team-a-p2': ['Pizza', 'Dance', 'Hammer'],
+    'team-b-p1': ['Garden', 'Run', 'Lion'],
+    'team-b-p2': ['Rocket', 'Sing', 'Doctor'],
   },
 };

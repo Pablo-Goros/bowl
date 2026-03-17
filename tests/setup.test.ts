@@ -32,6 +32,21 @@ function testValidationErrors() {
   assert.equal(validation.errors.length, 4);
 }
 
+function testDuplicateNameValidation() {
+  const validation = validateSetupDraft({
+    teamA: { name: 'Same', players: ['Alex', 'Alex'] },
+    teamB: { name: 'same', players: ['Riley'] },
+  });
+
+  assert.equal(validation.valid, false);
+  assert.ok(validation.errors.includes('Team names must be different.'));
+  assert.ok(
+    validation.errors.includes(
+      'Team A player names must be unique within the team.',
+    ),
+  );
+}
+
 function testBalanceSuggestion() {
   const suggestion = getBalanceSuggestion({
     teamA: { name: 'Lions', players: ['A', 'B', 'C'] },
@@ -59,6 +74,7 @@ function testSessionBridge() {
 function run() {
   testNormalizeAndValidate();
   testValidationErrors();
+  testDuplicateNameValidation();
   testBalanceSuggestion();
   testSessionBridge();
   console.log('setup tests passed');

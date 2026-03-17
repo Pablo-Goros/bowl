@@ -5,5 +5,4 @@ export type GameAction =
   | { type: 'WORD_GUESSED' }
   | { type: 'WORD_SKIPPED' }
   | { type: 'ROUND_END'; reason: RoundEndReason }
-  | { type: 'NEXT_ROUND'; nowMs: number }
   | { type: 'NEXT_SECTION'; nowMs: number };

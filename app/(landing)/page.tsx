@@ -4,7 +4,6 @@ const flowLinks = [
   { href: '/game/setup', label: 'Game setup' },
   { href: '/game/word-entry', label: 'Word entry' },
   { href: '/game/round', label: 'Round screen' },
-  { href: '/game/round-summary', label: 'Round summary' },
   { href: '/game/game-summary', label: 'Game summary' },
 ];
 

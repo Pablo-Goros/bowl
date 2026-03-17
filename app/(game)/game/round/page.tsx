@@ -8,14 +8,11 @@ import { Button } from '@/components/ui/button';
 import {
   createInitialGameState,
   getActiveRound,
-  getCurrentPlayerName,
   getCurrentTeam,
   getScoreboard,
-  getSectionProgress,
   reduceGame,
   type GameAction,
   type GameState,
-  type RoundEndReason,
 } from '@/lib/game-engine';
 import {
   clearStoredGameState,
@@ -25,9 +22,17 @@ import {
   saveGameStateToStorage,
 } from '@/lib/game-session';
 
-type ActionOptions = {
-  navigateToSummary?: boolean;
-};
+function migrateLegacyState(state: GameState): GameState {
+  const phase = (state as { phase: string }).phase;
+  if (phase !== 'round_summary') {
+    return state;
+  }
+
+  return {
+    ...state,
+    phase: 'ready',
+  };
+}
 
 export default function RoundPage() {
   const router = useRouter();
@@ -40,7 +45,13 @@ export default function RoundPage() {
   useEffect(() => {
     const storedState = loadGameStateFromStorage();
     if (storedState) {
-      setState(storedState);
+      const migrated = migrateLegacyState(storedState);
+      setState(migrated);
+
+      if (migrated !== storedState) {
+        saveGameStateToStorage(migrated);
+      }
+
       setHydrated(true);
       return;
     }
@@ -70,46 +81,30 @@ export default function RoundPage() {
       return;
     }
 
-    if (
-      state.phase === 'round_summary' ||
-      state.phase === 'section_transition'
-    ) {
-      router.replace('/game/round-summary');
-      return;
-    }
-
     if (state.phase === 'match_complete') {
       router.replace('/game/game-summary');
     }
   }, [hydrated, router, state]);
 
-  const applyAction = useCallback(
-    (action: GameAction, options?: ActionOptions) => {
-      setState((previous) => {
-        if (!previous) {
-          return previous;
-        }
+  const applyAction = useCallback((action: GameAction) => {
+    setState((previous) => {
+      if (!previous) {
+        return previous;
+      }
 
-        try {
-          const next = reduceGame(previous, action);
-          saveGameStateToStorage(next);
-          setError(null);
-
-          if (options?.navigateToSummary) {
-            router.push('/game/round-summary');
-          }
-
-          return next;
-        } catch (err) {
-          setError(
-            err instanceof Error ? err.message : 'Unable to update the round.',
-          );
-          return previous;
-        }
-      });
-    },
-    [router],
-  );
+      try {
+        const next = reduceGame(previous, action);
+        saveGameStateToStorage(next);
+        setError(null);
+        return next;
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : 'Unable to update the round.',
+        );
+        return previous;
+      }
+    });
+  }, []);
 
   const handleRoundStart = useCallback(() => {
     applyAction({ type: 'ROUND_START', nowMs: Date.now() });
@@ -123,18 +118,23 @@ export default function RoundPage() {
     applyAction({ type: 'WORD_SKIPPED' });
   }, [applyAction]);
 
-  const handleEndRound = useCallback(
-    (reason: RoundEndReason) => {
-      applyAction({ type: 'ROUND_END', reason }, { navigateToSummary: true });
-    },
-    [applyAction],
-  );
+  const handleEndRound = useCallback(() => {
+    applyAction({ type: 'ROUND_END', reason: 'manual_end' });
+  }, [applyAction]);
+
+  const handleNextSection = useCallback(() => {
+    applyAction({ type: 'NEXT_SECTION', nowMs: Date.now() });
+  }, [applyAction]);
 
   const activeRound = state ? getActiveRound(state) : null;
   const currentTeam = state ? getCurrentTeam(state) : null;
-  const clueGiver = state ? getCurrentPlayerName(state) : null;
+  const activeRoundTeam =
+    state && activeRound
+      ? (state.teams.find((team) => team.id === activeRound.teamId) ?? null)
+      : null;
   const scoreboard = state ? getScoreboard(state) : null;
-  const progress = state ? getSectionProgress(state) : null;
+  const latestSectionScore =
+    state?.sectionScores[state.sectionScores.length - 1] ?? null;
   const activeWord =
     state && state.bowl.activeWordId
       ? state.words[state.bowl.activeWordId]
@@ -182,18 +182,23 @@ export default function RoundPage() {
     }
 
     setAutoEndedRoundId(activeRoundId);
-    handleEndRound('timer');
-  }, [
-    activeRoundId,
-    autoEndedRoundId,
-    handleEndRound,
-    phase,
-    remainingSeconds,
-  ]);
+    applyAction({ type: 'ROUND_END', reason: 'timer' });
+  }, [activeRoundId, autoEndedRoundId, applyAction, phase, remainingSeconds]);
 
-  const guessedThisRound = activeRound?.guessedWordIds.length ?? 0;
-  const skippedThisRound = activeRound?.skippedWordIds.length ?? 0;
   const cardClass = 'rounded-lg border p-4 space-y-3';
+
+  function getSectionRuleLabel(section: number | undefined): string {
+    switch (section) {
+      case 1:
+        return 'Explain with words only.';
+      case 2:
+        return 'Give exactly one-word clues.';
+      case 3:
+        return 'Act it out with no speaking.';
+      default:
+        return 'Follow the current section rules.';
+    }
+  }
 
   function renderScoreboard() {
     if (!scoreboard) {
@@ -215,39 +220,17 @@ export default function RoundPage() {
     );
   }
 
-  function renderProgress() {
-    if (!progress) {
-      return null;
-    }
-
-    return (
-      <section className="rounded-lg border p-4 text-sm">
-        <p className="font-medium text-base">Section progress</p>
-        <div className="mt-2 space-y-1">
-          <p>
-            Words remaining:{' '}
-            <span className="font-semibold">
-              {progress.remainingWordCount} / {progress.totalWordCount}
-            </span>
-          </p>
-          <p>Guessed this round: {guessedThisRound}</p>
-          <p>Skipped this round: {skippedThisRound}</p>
-        </div>
-      </section>
-    );
-  }
-
   function renderReadyState() {
     return (
       <section className={cardClass}>
         <p className="text-sm text-muted-foreground">
-          Section {state?.section} • 60-second turns
+          Section {state?.section} - 60-second turns
         </p>
         <p className="text-xl font-semibold">
-          {currentTeam?.name ?? 'Next team'} is up!
+          {currentTeam?.name ?? 'Next team'} is up.
         </p>
         <p className="text-sm text-muted-foreground">
-          Clue giver: <span className="font-medium">{clueGiver ?? 'TBD'}</span>
+          Players decide who holds the phone for this round.
         </p>
         <Button className="mt-4 w-full" onClick={handleRoundStart}>
           Start round
@@ -259,42 +242,83 @@ export default function RoundPage() {
   function renderActiveState() {
     return (
       <>
-        <section className={`${cardClass} text-center`}>
-          <p className="text-sm text-muted-foreground">
-            Team {currentTeam?.name ?? '??'}
+        <section className="rounded-xl border p-6 text-center">
+          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+            Section {state?.section} - Team {activeRoundTeam?.name ?? 'Unknown'}
           </p>
-          <p className="text-5xl font-bold tabular-nums">{remainingSeconds}s</p>
-          <p className="text-lg font-semibold">
+          <p className="mt-4 text-7xl font-bold leading-none tabular-nums">
+            {remainingSeconds}s
+          </p>
+          <p className="mt-6 rounded-lg bg-muted px-4 py-8 text-4xl font-semibold leading-tight">
             {activeWord?.text ?? 'No words remaining'}
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Clue giver:{' '}
-            <span className="font-medium">{clueGiver ?? 'Unknown'}</span>
           </p>
         </section>
 
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <Button onClick={handleWordGuessed} disabled={!activeWord}>
+          <Button
+            className="h-12 text-base"
+            onClick={handleWordGuessed}
+            disabled={!activeWord}
+          >
             Guessed
           </Button>
           <Button
             variant="secondary"
+            className="h-12 text-base"
             onClick={handleWordSkipped}
             disabled={!activeWord}
           >
             Skip
           </Button>
-          <Button variant="destructive" onClick={() => handleEndRound('foul')}>
-            Foul
-          </Button>
           <Button
-            variant="outline"
-            onClick={() => handleEndRound('manual_end')}
+            variant="destructive"
+            className="h-12 text-base sm:col-span-2"
+            onClick={handleEndRound}
           >
             End round
           </Button>
         </div>
       </>
+    );
+  }
+
+  function renderSectionTransition() {
+    return (
+      <section className={cardClass}>
+        <p className="text-sm text-muted-foreground">
+          Section {latestSectionScore?.section ?? '?'} complete.
+        </p>
+        {latestSectionScore ? (
+          <div className="space-y-2 text-sm">
+            <p className="font-medium">Section totals</p>
+            <ul className="space-y-1">
+              {Object.entries(latestSectionScore.teamScores).map(
+                ([teamId, score]) => {
+                  const teamName =
+                    state?.teams.find((team) => team.id === teamId)?.name ??
+                    teamId;
+                  return (
+                    <li
+                      className="flex items-center justify-between"
+                      key={teamId}
+                    >
+                      <span>{teamName}</span>
+                      <span className="font-semibold">{score}</span>
+                    </li>
+                  );
+                },
+              )}
+            </ul>
+          </div>
+        ) : null}
+        <p className="text-sm text-muted-foreground">
+          Next up: Section {state?.section}.{' '}
+          {getSectionRuleLabel(state?.section)}
+        </p>
+        <Button className="w-full" onClick={handleNextSection}>
+          Continue to section {state?.section}
+        </Button>
+      </section>
     );
   }
 
@@ -305,17 +329,20 @@ export default function RoundPage() {
     router.push('/game/setup');
   }
 
+  const canReviewWords = Boolean(state && state.rounds.length === 0);
   const showRoundUi =
     hydrated &&
     state &&
-    (state.phase === 'ready' || state.phase === 'round_active');
+    (state.phase === 'ready' ||
+      state.phase === 'round_active' ||
+      state.phase === 'section_transition');
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-4 px-4 py-8">
       <header className="space-y-2">
-        <h1 className="text-2xl font-semibold">Section 1 round flow</h1>
+        <h1 className="text-2xl font-semibold">Section round flow</h1>
         <p className="text-sm text-muted-foreground">
-          Track timer, words, and scoring for each 60-second turn.
+          Start each turn manually, then track guesses against the timer.
         </p>
       </header>
 
@@ -327,15 +354,18 @@ export default function RoundPage() {
 
       {!hydrated ? (
         <section className={cardClass}>
-          <p>Loading session…</p>
+          <p>Loading session...</p>
         </section>
       ) : null}
 
       {showRoundUi ? (
         <>
-          {renderScoreboard()}
-          {renderProgress()}
-          {state?.phase === 'ready' ? renderReadyState() : renderActiveState()}
+          {state?.phase !== 'round_active' ? renderScoreboard() : null}
+          {state?.phase === 'ready' ? renderReadyState() : null}
+          {state?.phase === 'round_active' ? renderActiveState() : null}
+          {state?.phase === 'section_transition'
+            ? renderSectionTransition()
+            : null}
         </>
       ) : null}
 
@@ -348,28 +378,15 @@ export default function RoundPage() {
         </section>
       ) : null}
 
-      {hydrated &&
-      state &&
-      state.phase !== 'ready' &&
-      state.phase !== 'round_active' ? (
-        <section className={cardClass}>
-          <p className="text-sm">
-            Current phase: {state.phase}. Continue from the summary screen to
-            keep playing.
-          </p>
-          <Button asChild className="mt-2 w-full">
-            <Link href="/game/round-summary">Open summary</Link>
-          </Button>
-        </section>
-      ) : null}
-
       <div className="mt-4 flex gap-2">
-        <Button asChild variant="ghost" className="flex-1">
-          <Link href="/game/word-entry">Review word entry</Link>
-        </Button>
+        {canReviewWords ? (
+          <Button asChild variant="ghost" className="flex-1">
+            <Link href="/game/word-entry">Review word entry</Link>
+          </Button>
+        ) : null}
         <Button
           variant="outline"
-          className="flex-1"
+          className={canReviewWords ? 'flex-1' : 'w-full'}
           onClick={handleResetSession}
         >
           Reset session

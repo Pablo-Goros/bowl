@@ -5,7 +5,6 @@ export type MatchPhase =
   | 'word_entry'
   | 'ready'
   | 'round_active'
-  | 'round_summary'
   | 'section_transition'
   | 'match_complete';
 
@@ -35,13 +34,12 @@ export interface BowlState {
   activeWordId: string | null;
 }
 
-export type RoundEndReason = 'timer' | 'manual_end' | 'foul';
+export type RoundEndReason = 'timer' | 'manual_end' | 'all_words';
 
 export interface RoundState {
   id: string;
   section: SectionId;
   teamId: string;
-  clueGiverPlayerId: string;
   startedAtMs: number;
   durationSec: number;
   guessedWordIds: string[];
@@ -66,7 +64,6 @@ export interface GameState {
   sectionScores: SectionScore[];
   activeRoundId: string | null;
   activeTeamId: string | null;
-  activePlayerByTeam: Record<string, number>;
   winnerTeamId: string | null;
 }
 

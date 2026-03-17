@@ -4,8 +4,8 @@ This document completes Sprint 0.1 from `docs/SPRINT_PLAN.md`.
 
 ## Status
 
-- Sprint: **0.1 — Product + Rules Modeling**
-- Outcome: **Completed**
+- Sprint: `0.1 - Product + Rules Modeling`
+- Outcome: `Completed`
 - Scope covered:
   - Rules interpretation spec
   - Domain glossary
@@ -20,60 +20,59 @@ This document completes Sprint 0.1 from `docs/SPRINT_PLAN.md`.
 
 ### 1.1 Core match setup
 
-- The game has exactly **2 teams**.
-- Player count must be at least 2 overall.
+- The game has exactly `2` teams.
+- Player count must be at least `2` overall.
 - Team sizes should be roughly balanced (soft rule).
-- Each player submits **3 to 5 words**.
-- Words are intended to be **things or verbs** (guideline-first validation for MVP).
+- Each player submits `3` to `5` words.
+- Words are intended to be things or verbs (guideline-first validation for MVP).
 
 ### 1.2 Match structure
 
-- A match has **3 sections**:
+- A match has `3` sections:
   1. Explain with words
   2. One word only
   3. Charades
-- Each section is composed of alternating **1-minute rounds** between teams.
-- During a round, the active clue-giver tries to get teammates to guess words.
+- Each section is composed of alternating `1`-minute rounds between teams.
+- The app tracks the active team, timer, bowl, and score.
+- Players decide who holds the phone and gives clues for a round.
 - On correct guess, the next word is drawn from the bowl.
-- Section ends when bowl has no remaining words.
+- A section ends when the bowl has no remaining words.
 - The same bowl word set is reused across sections.
 
 ### 1.3 Scoring and win condition
 
-- **1 point** per correctly guessed word.
+- `1` point per correctly guessed word.
 - Track both section score and total score.
-- Match winner is decided by **total points across all 3 sections**.
+- Match winner is decided by total points across all `3` sections.
 - If total points are tied, use sudden-death rounds until one team wins a full alternation cycle.
 
 ### 1.4 Rule constraints by section (for UI reminders and social enforcement)
 
-- Section 1: verbal explanation allowed, no acting/sounds/pointing.
+- Section 1: verbal explanation allowed, no acting, sounds, or pointing.
 - Section 2: clue must be exactly one word.
-- Section 3: no speech or sounds; gestures/body language only.
+- Section 3: no speech or sounds; gestures and body language only.
 
 ### 1.5 Round-ending events
 
 A round can end by:
 
-1. Timer reaches 0.
-2. Player taps explicit “end round”.
-3. Foul event (socially enforced by players, then manual round end/pass).
+1. Timer reaches `0`.
+2. Player taps explicit `End round`.
+3. The bowl is emptied by the final correct guess.
 
-On round end, control passes to opposite team.
+Rule violations are still socially enforced by players, but the app uses the same manual round-end action rather than a dedicated foul event.
 
 ---
 
 ## 2) Domain Glossary
 
-- **Match**: full game from setup through winner.
-- **Section**: one of the 3 rule modes.
-- **Round**: one team’s 60-second turn window.
-- **Turn**: the currently active clue-giver within a round.
-- **Bowl**: pool of words available in current section.
-- **Word state**: queued, active, guessed, skipped.
-- **Foul**: rule violation handled by players; app only needs round-end action.
-- **Foul flag**: simple boolean marker (`true/false`) indicating a round ended due to a foul.
-- **Typed foul reasons**: detailed categories like `spoke_two_words`, `filler_sound`, `illegal_gesture`. **Not required for MVP**.
+- Match: full game from setup through winner.
+- Section: one of the `3` rule modes.
+- Round: one team's `60`-second turn window.
+- Turn: the currently active team's timed play window.
+- Bowl: pool of words available in the current section.
+- Word state: queued, active, guessed, skipped.
+- Foul: rule violation handled socially by players; the app does not store a dedicated foul reason.
 
 ---
 
@@ -87,7 +86,6 @@ export type MatchPhase =
   | 'word_entry'
   | 'ready'
   | 'round_active'
-  | 'round_summary'
   | 'section_transition'
   | 'match_complete';
 
@@ -98,7 +96,7 @@ export interface Team {
 }
 ```
 
-(Full skeleton types are implemented in `lib/game-engine/types.ts`.)
+Full implementation lives in `lib/game-engine/types.ts`.
 
 ---
 
@@ -111,12 +109,11 @@ stateDiagram-v2
   WordEntry --> Ready: WORD_ENTRY_COMPLETED
   Ready --> RoundActive: ROUND_STARTED
 
-  RoundActive --> RoundSummary: ROUND_ENDED(timer|manual|foul)
-  RoundSummary --> SectionTransition: BOWL_EMPTY
-  RoundSummary --> RoundActive: NEXT_ROUND
+  RoundActive --> Ready: ROUND_ENDED(timer|manual)
+  RoundActive --> SectionTransition: SECTION_COMPLETE
+  RoundActive --> MatchComplete: FINAL_SECTION_COMPLETE
 
   SectionTransition --> Ready: NEXT_SECTION_PREPARED
-  SectionTransition --> MatchComplete: MATCH_WINNER_DETERMINED
 
   MatchComplete --> [*]
 ```
@@ -125,31 +122,35 @@ stateDiagram-v2
 
 ## 5) Edge-case Policy Decisions (Sprint 0.1, finalized)
 
-1. **Skip handling**
-   - Skipped word re-enters **immediately**.
-   - It is shuffled into remaining pool.
+1. Skip handling
+   - Skipped word re-enters immediately.
+   - It is shuffled into the remaining pool.
    - Guarantee at least one different word before it appears again.
 
-2. **Order randomization**
+2. Order randomization
    - Bowl order is reshuffled between rounds.
 
-3. **Last-word + timer boundary**
-   - If “guessed” action is registered before timer end event, count it.
-   - If timer event is processed first, word does not count.
+3. Last-word + timer boundary
+   - If `Guessed` is registered before the timer-end event, count it.
+   - If the timer event is processed first, the word does not count.
 
-4. **Team balancing**
+4. Team balancing
    - Imbalance warning is non-blocking.
    - Hard block only on invalid minimum requirements.
 
-5. **Word validation strictness**
-   - Apostrophe words count as one token (`don't`).
-   - Hyphenated words count as two tokens (`ice-cream` invalid).
-   - Multi-word phrases invalid.
-   - “Thing/verb” remains guidance-level in MVP.
+5. Word validation strictness
+   - Apostrophe words count as one token: `don't`
+   - Hyphenated words count as two tokens: `ice-cream`
+   - Multi-word phrases are invalid.
+   - "Thing/verb" remains guidance-level in MVP.
 
-6. **Foul behavior**
-   - No dedicated “typed foul reason” UX required.
-   - Players enforce verbally; app only needs manual round end/pass.
+6. Foul behavior
+   - No dedicated foul button or typed foul reason UX.
+   - Players enforce verbally; app uses the normal manual round-end action.
+
+7. Section score visibility
+   - No separate round-summary screen is required.
+   - Section totals should be visible during section transitions and in final results.
 
 ---
 
@@ -162,4 +163,4 @@ stateDiagram-v2
 - [x] Glossary added.
 - [x] Rule clarifications from implementation kickoff captured.
 
-**Sprint 0.1 exit criteria satisfied. Ready to execute Sprint 0.2.**
+Sprint 0.1 exit criteria satisfied. Ready to execute Sprint 0.2.

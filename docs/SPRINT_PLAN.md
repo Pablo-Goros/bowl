@@ -6,377 +6,385 @@ This sprint plan breaks `DEVELOPMENT_PLAN.md` into smaller, execution-ready step
 
 ## Planning assumptions
 
-- Part-time cadence (variable weekly availability).
+- Part-time cadence with variable weekly availability.
 - Mobile-first web app (PWA path), pass-and-play first.
-- Priority is polished UX/performance and game-night reliability.
+- Priority is polished UX, performance, and game-night reliability.
 
 ---
 
 ## Release map (high-level)
 
-- **Milestone 0**: Foundation and architecture.
-- **Milestone 1**: Playable local pass-and-play MVP.
-- **Milestone 2**: Reliability and polish.
-- **Milestone 3**: Shareable public release.
+- Milestone 0: Foundation and architecture.
+- Milestone 1: Playable local pass-and-play MVP.
+- Milestone 2: Reliability and polish.
+- Milestone 3: Shareable public release.
 
 Each milestone is split into smaller sprints with explicit outcomes.
 
 ---
 
-## Milestone 0 — Foundation
+## Milestone 0 - Foundation
 
-### Sprint 0.1 — Product + Rules Modeling
+### Sprint 0.1 - Product + Rules Modeling
 
-**Goal:** Convert game rules into deterministic system behavior.
+Goal: convert game rules into deterministic system behavior.
 
-**Status:** ✅ Completed in `docs/SPRINT_0_1_RULES_MODEL.md`.
+Status: completed in `docs/SPRINT_0_1_RULES_MODEL.md`.
 
-**Tasks**
+Tasks
 
 - Translate `GAME_RULES.md` into explicit domain entities:
-  - Team, Player, Word, Bowl, Section, Round, Turn, Score.
+  - Team
+  - Player
+  - Word
+  - Bowl
+  - Section
+  - Round
+  - Score
 - Define valid game states and transitions.
 - Define edge-case decisions (skip behavior, tie-break handling, accidental exits).
 - Write a state-transition diagram in docs.
 
-**Deliverables**
+Deliverables
 
-- Rules interpretation spec (single markdown doc).
+- Rules interpretation spec.
 - State machine diagram.
 - Glossary for shared terms.
 
-**Definition of done**
+Definition of done
 
-- Any teammate can explain full game flow from docs only.
+- Any teammate can explain the full game flow from docs only.
 - No rule ambiguity remains for implementation-critical flows.
 
 ---
 
-### Sprint 0.2 — Game Engine Skeleton
+### Sprint 0.2 - Game Engine Skeleton
 
-**Goal:** Implement testable game logic independent of UI.
+Goal: implement testable game logic independent of UI.
 
-**Status:** ✅ Completed. Engine invariants, selectors, and baseline transition flow are implemented in `lib/game-engine/`.
+Status: completed. Engine invariants, selectors, and baseline transition flow are implemented in `lib/game-engine/`.
 
-**Tasks**
+Tasks
 
 - Create `game-engine` module (pure TS):
-  - `GameState` types.
-  - `GameEvent`/`Action` union.
-  - reducer/transition function.
-- Add selectors (current team/player, section progress, scores).
+  - `GameState` types
+  - `GameEvent`/`Action` union
+  - reducer/transition function
+- Add selectors for current team, section progress, and scores.
 - Add invariant checks to reject impossible transitions.
 
-**Deliverables**
+Deliverables
 
 - Engine folder structure and baseline API.
 - Minimal fixtures for sample games.
 
-**Definition of done**
+Definition of done
 
-- Game can be advanced from setup → section end through code-only events.
+- Game can be advanced from setup to section end through code-only events.
 - Engine has no React/UI dependencies.
 
 ---
 
-### Sprint 0.3 — Test Harness + UI Skeleton
+### Sprint 0.3 - Test Harness + UI Skeleton
 
-**Goal:** Ensure confidence early and create navigation scaffold.
+Goal: ensure confidence early and create navigation scaffold.
 
-**Status:** ✅ Completed. Added executable engine tests and clickable mobile-first route placeholders for the full flow.
+Status: completed. Added executable engine tests and clickable mobile-first route placeholders for the full flow.
 
-**Tasks**
+Tasks
 
 - Add unit tests for core transitions.
-- Add invariant/property-style tests.
+- Add invariant and property-style tests.
 - Build app route skeleton screens:
   - Home
   - Game setup
   - Word entry
   - Round screen
-  - Round summary
   - Game summary
 
-**Deliverables**
+Deliverables
 
 - Test suite for rules engine foundations.
 - Clickable mobile-first route skeleton.
 
-**Definition of done**
+Definition of done
 
 - Core engine tests pass.
-- User can click through full app flow placeholders.
+- User can click through the app flow placeholders.
 
 ---
 
-## Milestone 1 — Local Playable MVP
+## Milestone 1 - Local Playable MVP
 
-### Sprint 1.1 — Setup and Team Management
+### Sprint 1.1 - Setup and Team Management
 
-**Goal:** Create game session with teams and players quickly.
+Goal: create a game session with teams and players quickly.
 
-**Status:** ✅ Completed. Setup form now validates teams/players, supports add/remove player controls, provides balance suggestions, and passes session draft data into word entry.
+Status: completed. Setup form now validates teams and players, supports add/remove player controls, provides balance suggestions, and passes session draft data into word entry.
 
-**Tasks**
+Tasks
 
 - Build setup form with validation:
-  - Team names.
-  - Players per team.
-  - Basic constraints from rules.
-- Add session creation action in engine/UI bridge.
+  - team names
+  - players per team
+  - basic constraints from rules
+- Add session creation action in the engine/UI bridge.
 - Add UX helpers:
-  - Add/remove player.
-  - Auto-balance helper suggestion.
+  - add/remove player
+  - auto-balance helper suggestion
 
-**Deliverables**
+Deliverables
 
 - Functional setup flow into word entry.
 
-**Definition of done**
+Definition of done
 
-- New session can be created in < 2 minutes on phone.
+- New session can be created in under two minutes on phone.
 
 ---
 
-### Sprint 1.2 — Word Entry and Validation UX
+### Sprint 1.2 - Word Entry and Validation UX
 
-**Goal:** Make input of 3–5 words per player smooth and error-resistant.
+Goal: make input of `3-5` words per player smooth and error-resistant.
 
-**Tasks**
+Tasks
 
 - Build per-player word entry steps.
 - Validate count rules and one-word restrictions.
 - Add quality-of-life features:
-  - Bulk paste with parsing (optional stretch).
-  - Duplicate warning.
-  - Clear progress indicator.
+  - bulk paste with parsing (optional stretch)
+  - duplicate warning
+  - clear progress indicator
 
-**Deliverables**
+Deliverables
 
-- Reliable word collection flow producing bowl payload.
+- Reliable word collection flow producing the bowl payload.
 
-**Definition of done**
+Definition of done
 
 - All players can submit valid words with clear progress and no confusion.
 
 ---
 
-### Sprint 1.3 — Core Round Loop (Section 1)
+### Sprint 1.3 - Core Round Loop (Section 1)
 
-**Goal:** Deliver one complete playable section end-to-end.
+Goal: deliver one complete playable section end-to-end.
 
-**Tasks**
+Tasks
 
 - Round screen with:
-  - 60s timer.
-  - Current clueing player/team.
-  - Word display.
-  - Actions: guessed / skip / foul / end.
-- Implement turn switching and bowl progression.
-- Round end summary with scored words.
+  - `60s` timer
+  - current active team
+  - word display
+  - actions: guessed / skip / end
+- Keep player assignment social:
+  - the app does not rotate or assign the clue-giver
+  - players decide who takes the phone each round
+- Implement team switching and bowl progression.
+- Show section totals in the section transition state instead of a standalone round-summary screen.
 
-**Deliverables**
+Deliverables
 
 - Fully playable Section 1.
 
-**Definition of done**
+Definition of done
 
 - Teams can complete Section 1 with accurate scoring.
 
 ---
 
-### Sprint 1.4 — Sections 2 & 3 + Full Match
+### Sprint 1.4 - Sections 2 & 3 + Full Match
 
-**Goal:** Complete full game loop for all sections.
+Goal: complete the full game loop for all sections.
 
-**Tasks**
+Tasks
 
-- Add section rule banners/reminders.
+- Add section rule banners and reminders.
 - Reuse bowl words across sections according to rules.
 - Complete section transitions and game-end winner logic.
 - Add tie-break flow.
 
-**Deliverables**
+Deliverables
 
 - Full match playable from setup to winner.
 
-**Definition of done**
+Definition of done
 
 - Entire game can be completed without manual intervention or rule breaks.
 
 ---
 
-### Sprint 1.5 — Local Persistence + Recovery
+### Sprint 1.5 - Local Persistence + Recovery
 
-**Goal:** Prevent game loss during real sessions.
+Goal: prevent game loss during real sessions.
 
-**Tasks**
+Tasks
 
-- Persist active session locally.
-- Restore state on refresh/reopen.
-- Add recover/reset controls.
-- Add safe guards for accidental navigation.
+- Persist the active session locally.
+- Restore state on refresh and reopen.
+- Add recover and reset controls.
+- Add safeguards for accidental navigation.
 
-**Deliverables**
+Deliverables
 
 - Session restore and reset experience.
 
-**Definition of done**
+Definition of done
 
 - Refreshing mid-game does not lose match progress.
 
 ---
 
-## Milestone 2 — Reliability & Polish
+## Milestone 2 - Reliability & Polish
 
-### Sprint 2.1 — Edge Cases and Stability Hardening
+### Sprint 2.1 - Edge Cases and Stability Hardening
 
-**Goal:** Eliminate game-night breaking issues.
+Goal: eliminate game-night breaking issues.
 
-**Tasks**
+Tasks
 
 - Cover edge cases:
-  - Min/max players.
-  - Empty/invalid words.
-  - Last-word timing boundary.
-  - Tie scenarios.
+  - min/max players
+  - empty/invalid words
+  - last-word timing boundary
+  - tie scenarios
 - Improve reducer error handling and telemetry hooks.
 - Add stronger input normalization.
 
-**Deliverables**
+Deliverables
 
 - Hardened logic and validation paths.
 
-**Definition of done**
+Definition of done
 
 - No blocker defects in repeated full-match simulation.
 
 ---
 
-### Sprint 2.2 — UX Polish Pass
+### Sprint 2.2 - UX Polish Pass
 
-**Goal:** Raise perceived quality to “professional.”
+Goal: raise perceived quality to a professional level.
 
-**Tasks**
+Tasks
 
 - Improve typography, spacing, and hierarchy for small screens.
-- Add subtle transitions/animations.
+- Add subtle transitions and animations.
 - Improve tap target sizes and interaction feedback.
 - Refine error, confirmation, and undo patterns.
 
-**Deliverables**
+Deliverables
 
 - Polished mobile gameplay UX.
 
-**Definition of done**
+Definition of done
 
-- User test feedback reports UI as clear, pleasant, and low-friction.
+- User test feedback reports the UI as clear, pleasant, and low-friction.
 
 ---
 
-### Sprint 2.3 — Performance and Device QA
+### Sprint 2.3 - Performance and Device QA
 
-**Goal:** Keep experience smooth on real phones.
+Goal: keep the experience smooth on real phones.
 
-**Tasks**
+Tasks
 
 - Optimize render hotspots and avoid unnecessary re-renders.
 - Validate timer accuracy across tab/background interruptions.
-- Run manual QA matrix:
+- Run a manual QA matrix:
   - iOS Safari
   - Android Chrome
   - small viewport stress tests
 
-**Deliverables**
+Deliverables
 
 - Device QA checklist with pass/fail notes.
 
-**Definition of done**
+Definition of done
 
 - Smooth interaction and reliable timing on target devices.
 
 ---
 
-## Milestone 3 — Shareable Release
+## Milestone 3 - Shareable Release
 
-### Sprint 3.1 — PWA and Branding
+### Sprint 3.1 - PWA and Branding
 
-**Goal:** Make app installable and launch-ready.
+Goal: make the app installable and launch-ready.
 
-**Tasks**
+Tasks
 
-- Add/verify manifest, icons, metadata.
-- Add install prompts/education UX.
-- Polish landing page and game intro.
+- Add and verify manifest, icons, and metadata.
+- Add install prompts and education UX.
+- Polish the landing page and game intro.
 
-**Deliverables**
+Deliverables
 
 - Installable PWA with coherent branding.
 
-**Definition of done**
+Definition of done
 
-- Users can install and launch from home screen.
+- Users can install and launch from the home screen.
 
 ---
 
-### Sprint 3.2 — Docs, Help, and Rules Surface
+### Sprint 3.2 - Docs, Help, and Rules Surface
 
-**Goal:** Make app self-explanatory for new players.
+Goal: make the app self-explanatory for new players.
 
-**Tasks**
+Tasks
 
 - Add in-app quick rules and section reminders.
-- Add help/troubleshooting page.
-- Add release notes/changelog entry.
+- Add help and troubleshooting page.
+- Add release notes or changelog entry.
 
-**Deliverables**
+Deliverables
 
 - User-facing docs screens in app.
 
-**Definition of done**
+Definition of done
 
 - New users can run a game without external explanation.
 
 ---
 
-### Sprint 3.3 — Launch + Feedback Loop
+### Sprint 3.3 - Launch + Feedback Loop
 
-**Goal:** Publish and improve with real usage.
+Goal: publish and improve with real usage.
 
-**Tasks**
+Tasks
 
-- Deploy stable release.
-- Create lightweight feedback channel (form or issue template).
-- Run 2–3 friend/family playtest sessions and collect insights.
-- Prioritize post-launch fixes/enhancements.
+- Deploy a stable release.
+- Create a lightweight feedback channel (form or issue template).
+- Run `2-3` friend/family playtest sessions and collect insights.
+- Prioritize post-launch fixes and enhancements.
 
-**Deliverables**
+Deliverables
 
 - Public release and first feedback-based iteration backlog.
 
-**Definition of done**
+Definition of done
 
 - Live shareable version with actionable user feedback captured.
 
 ---
 
-## Cross-sprint backlog template (use for every ticket)
+## Cross-sprint backlog template
 
-For each issue/task, capture:
+For each issue or task, capture:
 
-1. **User value** (why this matters in game-night context)
-2. **Acceptance criteria** (clear pass/fail)
-3. **Edge cases** (what can go wrong)
-4. **Telemetry/observation** (how you’ll validate impact)
-5. **Estimate** (S/M/L + confidence)
+1. User value
+2. Acceptance criteria
+3. Edge cases
+4. Telemetry or observation
+5. Estimate (`S/M/L` plus confidence)
 
 ---
 
-## Suggested cadence (low-energy friendly)
+## Suggested cadence
 
-- Work in **1-week micro-sprints**.
-- Keep active WIP to **max 2 tasks**.
-- Always pair one “logic” task with one “UX” task to maintain momentum.
+- Work in one-week micro-sprints.
+- Keep active WIP to a maximum of two tasks.
+- Always pair one logic task with one UX task to maintain momentum.
 - End each week with one playable increment, even if small.
 
 ---
@@ -385,12 +393,12 @@ For each issue/task, capture:
 
 ### Week 1
 
-- Sprint 0.1 + start 0.2
-- Output: state model + initial reducer + first tests
+- Sprint `0.1` plus start `0.2`
+- Output: state model, initial reducer, first tests
 
 ### Week 2
 
-- Finish 0.2 + 0.3
-- Output: tested engine skeleton + clickable app flow
+- Finish `0.2` plus `0.3`
+- Output: tested engine skeleton and clickable app flow
 
-If completed, you are ready to start Sprint 1.1 immediately.
+If completed, the project is ready to start Sprint `1.1` immediately.

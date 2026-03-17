@@ -10,21 +10,17 @@ import type {
   WordEntry,
 } from './types';
 import {
-  incrementIndex,
   nextSection,
   ROUND_DURATION_SEC,
   SECTION_ORDER,
   shuffle,
 } from './utils';
+import { toLegacyPlayerWordKey, toPlayerWordKey } from './word-keys';
 
 function invariant(condition: unknown, message: string): asserts condition {
   if (!condition) {
     throw new Error(message);
   }
-}
-
-function toKey(teamName: string, playerName: string): string {
-  return `${teamName}::${playerName}`;
 }
 
 function createTeam(id: string, name: string): Team {
@@ -132,20 +128,88 @@ function getWinnerTeamByTotalScore(teams: Team[]): string | null {
   return null;
 }
 
+function finalizeRound(
+  state: GameState,
+  finalizedRound: RoundState,
+): GameState {
+  const activeTeamId = state.activeTeamId;
+  invariant(activeTeamId, 'No active team when ending round');
+
+  const activeTeam = getTeamById(state, activeTeamId);
+  const updatedTeams = incrementTeamScores(
+    state,
+    activeTeam.id,
+    finalizedRound.guessedWordIds.length,
+  );
+
+  const nextTeamId =
+    state.teams.find((team) => team.id !== activeTeam.id)?.id ?? activeTeam.id;
+
+  const randomizedRemaining = shuffle(
+    state.bowl.activeWordId
+      ? [state.bowl.activeWordId, ...state.bowl.drawPile]
+      : state.bowl.drawPile,
+  );
+  const nextDraw = drawNextWord(randomizedRemaining);
+
+  const base = withUpdatedRound(
+    {
+      ...state,
+      phase: 'ready',
+      activeTeamId: nextTeamId,
+      activeRoundId: null,
+      teams: updatedTeams,
+      bowl: {
+        ...state.bowl,
+        activeWordId: nextDraw.activeWordId,
+        drawPile: nextDraw.drawPile,
+      },
+    },
+    finalizedRound,
+  );
+
+  if (base.bowl.activeWordId || base.bowl.drawPile.length > 0) {
+    return base;
+  }
+
+  const sectionScore = computeSectionScore(base, base.section);
+  const allSectionScores = [...base.sectionScores, sectionScore];
+  const next = nextSection(base.section);
+
+  if (!next) {
+    return {
+      ...base,
+      phase: 'match_complete',
+      sectionScores: allSectionScores,
+      winnerTeamId: getWinnerTeamByTotalScore(base.teams),
+    };
+  }
+
+  const refreshedWords = shuffle(Object.keys(base.words));
+  const nextRoundDraw = drawNextWord(refreshedWords);
+  return {
+    ...base,
+    phase: 'section_transition',
+    section: next,
+    sectionScores: allSectionScores,
+    bowl: {
+      drawPile: nextRoundDraw.drawPile,
+      guessedPile: [],
+      activeWordId: nextRoundDraw.activeWordId,
+    },
+  };
+}
+
 function createRound(state: GameState, nowMs: number): RoundState {
   const activeTeamId = state.activeTeamId;
   invariant(activeTeamId, 'No active team id');
 
   const team = getTeamById(state, activeTeamId);
-  const playerPointer = state.activePlayerByTeam[team.id] ?? 0;
-  const clueGiverPlayerId = team.playerIds[playerPointer];
-  invariant(clueGiverPlayerId, 'No clue giver available for active team');
 
   return {
     id: `r${state.rounds.length + 1}`,
     section: state.section,
     teamId: team.id,
-    clueGiverPlayerId,
     startedAtMs: nowMs,
     durationSec: ROUND_DURATION_SEC,
     guessedWordIds: [],
@@ -156,8 +220,26 @@ function createRound(state: GameState, nowMs: number): RoundState {
 function validateInput(input: NewGameInput): void {
   invariant(input.teamAName.trim().length > 0, 'Team A name is required');
   invariant(input.teamBName.trim().length > 0, 'Team B name is required');
+  invariant(
+    input.teamAName.trim().toLocaleLowerCase() !==
+      input.teamBName.trim().toLocaleLowerCase(),
+    'Team names must be different',
+  );
   invariant(input.teamAPlayers.length > 0, 'Team A needs at least one player');
   invariant(input.teamBPlayers.length > 0, 'Team B needs at least one player');
+
+  const hasDuplicate = (players: string[]) =>
+    new Set(players.map((name) => name.trim().toLocaleLowerCase())).size !==
+    players.length;
+
+  invariant(
+    !hasDuplicate(input.teamAPlayers),
+    'Team A player names must be unique within the team',
+  );
+  invariant(
+    !hasDuplicate(input.teamBPlayers),
+    'Team B player names must be unique within the team',
+  );
 }
 
 function assertActionAllowed(state: GameState, action: GameAction): void {
@@ -187,12 +269,6 @@ function assertActionAllowed(state: GameState, action: GameAction): void {
       invariant(
         Boolean(state.activeTeamId),
         'ROUND_END requires an active team',
-      );
-      break;
-    case 'NEXT_ROUND':
-      invariant(
-        state.phase === 'round_summary',
-        `NEXT_ROUND requires phase=round_summary, received ${state.phase}`,
       );
       break;
     case 'NEXT_SECTION':
@@ -231,8 +307,11 @@ export function createInitialGameState(input: NewGameInput): GameState {
 
   players.forEach((player) => {
     const teamName = player.teamId === teamA.id ? teamA.name : teamB.name;
-    const key = toKey(teamName, player.name);
-    const playerWords = input.wordsByPlayer[key] ?? [];
+    const teamWordKey = player.teamId === teamA.id ? 'team-a' : 'team-b';
+    const key = toPlayerWordKey(teamWordKey, player.seatIndex);
+    const legacyKey = toLegacyPlayerWordKey(teamName, player.name);
+    const playerWords =
+      input.wordsByPlayer[key] ?? input.wordsByPlayer[legacyKey] ?? [];
 
     playerWords.forEach((text, idx) => {
       const id = createWordId(player.id, idx);
@@ -265,10 +344,6 @@ export function createInitialGameState(input: NewGameInput): GameState {
     sectionScores: [],
     activeRoundId: null,
     activeTeamId: teamA.id,
-    activePlayerByTeam: {
-      [teamA.id]: 0,
-      [teamB.id]: 0,
-    },
     winnerTeamId: null,
   };
 }
@@ -298,7 +373,7 @@ export function reduceGame(state: GameState, action: GameAction): GameState {
       };
 
       const next = drawNextWord(state.bowl.drawPile);
-      return withUpdatedRound(
+      const progressedState = withUpdatedRound(
         {
           ...state,
           bowl: {
@@ -310,6 +385,18 @@ export function reduceGame(state: GameState, action: GameAction): GameState {
         },
         updatedRound,
       );
+
+      if (
+        progressedState.bowl.activeWordId ||
+        progressedState.bowl.drawPile.length > 0
+      ) {
+        return progressedState;
+      }
+
+      return finalizeRound(progressedState, {
+        ...updatedRound,
+        endReason: 'all_words',
+      });
     }
 
     case 'WORD_SKIPPED': {
@@ -345,98 +432,13 @@ export function reduceGame(state: GameState, action: GameAction): GameState {
         ...round,
         endReason: action.reason,
       };
-
-      const activeTeamId = state.activeTeamId;
-      invariant(activeTeamId, 'No active team when ending round');
-
-      const activeTeam = getTeamById(state, activeTeamId);
-      const updatedTeams = incrementTeamScores(
-        state,
-        activeTeam.id,
-        finalizedRound.guessedWordIds.length,
-      );
-
-      const nextTeamId =
-        state.teams.find((team) => team.id !== activeTeam.id)?.id ??
-        activeTeam.id;
-      const nextPointer = incrementIndex(
-        state.activePlayerByTeam[activeTeam.id] ?? 0,
-        activeTeam.playerIds.length,
-      );
-
-      const randomizedRemaining = shuffle(
-        state.bowl.activeWordId
-          ? [state.bowl.activeWordId, ...state.bowl.drawPile]
-          : state.bowl.drawPile,
-      );
-      const nextDraw = drawNextWord(randomizedRemaining);
-
-      const base = withUpdatedRound(
-        {
-          ...state,
-          phase: 'round_summary',
-          activeTeamId: nextTeamId,
-          activeRoundId: null,
-          teams: updatedTeams,
-          activePlayerByTeam: {
-            ...state.activePlayerByTeam,
-            [activeTeam.id]: nextPointer,
-          },
-          bowl: {
-            ...state.bowl,
-            activeWordId: nextDraw.activeWordId,
-            drawPile: nextDraw.drawPile,
-          },
-        },
-        finalizedRound,
-      );
-
-      if (base.bowl.activeWordId || base.bowl.drawPile.length > 0) {
-        return base;
-      }
-
-      const sectionScore = computeSectionScore(base, base.section);
-      const allSectionScores = [...base.sectionScores, sectionScore];
-      const next = nextSection(base.section);
-
-      if (!next) {
-        return {
-          ...base,
-          phase: 'match_complete',
-          sectionScores: allSectionScores,
-          winnerTeamId: getWinnerTeamByTotalScore(base.teams),
-        };
-      }
-
-      const refreshedWords = shuffle(Object.keys(base.words));
-      const nextRoundDraw = drawNextWord(refreshedWords);
-      return {
-        ...base,
-        phase: 'section_transition',
-        section: next,
-        sectionScores: allSectionScores,
-        bowl: {
-          drawPile: nextRoundDraw.drawPile,
-          guessedPile: [],
-          activeWordId: nextRoundDraw.activeWordId,
-        },
-      };
+      return finalizeRound(state, finalizedRound);
     }
 
     case 'NEXT_SECTION': {
       return {
         ...state,
         phase: 'ready',
-      };
-    }
-
-    case 'NEXT_ROUND': {
-      const round = createRound(state, action.nowMs);
-      return {
-        ...state,
-        phase: 'round_active',
-        activeRoundId: round.id,
-        rounds: [...state.rounds, round],
       };
     }
 

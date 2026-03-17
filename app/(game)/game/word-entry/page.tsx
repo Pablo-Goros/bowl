@@ -5,7 +5,11 @@ import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import type { SetupDraft } from '@/lib/game-engine';
-import { parseSetupDraft, SETUP_DRAFT_STORAGE_KEY } from '@/lib/game-session';
+import {
+  loadGameStateFromStorage,
+  parseSetupDraft,
+  SETUP_DRAFT_STORAGE_KEY,
+} from '@/lib/game-session';
 
 function getSetupDraftFromStorage(): SetupDraft | null {
   if (typeof window === 'undefined') {
@@ -22,6 +26,10 @@ function getSetupDraftFromStorage(): SetupDraft | null {
 
 export default function WordEntryPage() {
   const [draft] = useState<SetupDraft | null>(getSetupDraftFromStorage);
+  const [roundsStarted] = useState(() => {
+    const state = loadGameStateFromStorage();
+    return Boolean(state && state.rounds.length > 0);
+  });
 
   return (
     <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-4 px-4 py-8">
@@ -30,11 +38,18 @@ export default function WordEntryPage() {
         Sprint 1.1 bridge complete. Setup is captured and handed off to word
         entry.
       </p>
-      <p className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
-        The detailed word entry flow is still under construction. For now, each
-        player receives auto-generated practice words so you can exercise the
-        new round loop (Sprint 1.3).
-      </p>
+      {roundsStarted ? (
+        <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          At least one round has already started. Word lists are locked for this
+          game.
+        </p>
+      ) : (
+        <p className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground">
+          The detailed word entry flow is still under construction. For now,
+          each player receives auto-generated practice words so you can exercise
+          the new round loop.
+        </p>
+      )}
 
       {draft ? (
         <section className="space-y-2 rounded-lg border p-4 text-sm">
@@ -56,7 +71,9 @@ export default function WordEntryPage() {
         <Link href="/game/setup">Back to setup</Link>
       </Button>
       <Button asChild>
-        <Link href="/game/round">Continue to round flow</Link>
+        <Link href="/game/round">
+          {roundsStarted ? 'Return to round flow' : 'Continue to round flow'}
+        </Link>
       </Button>
     </main>
   );

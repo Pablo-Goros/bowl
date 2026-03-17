@@ -1,9 +1,31 @@
-import type { GameState, NewGameInput } from './game-engine';
+import {
+  toLegacyPlayerWordKey,
+  toPlayerWordKey,
+  type GameState,
+  type NewGameInput,
+  type TeamWordKey,
+} from './game-engine';
 import type { SetupDraft } from './game-engine/setup';
 
 export const SETUP_DRAFT_STORAGE_KEY = 'bowl.setup-draft.v1';
 export const NEW_GAME_INPUT_STORAGE_KEY = 'bowl.new-game-input.v1';
 export const GAME_STATE_STORAGE_KEY = 'bowl.game-state.v1';
+
+const AUTO_WORDS_PER_PLAYER = 3;
+const DEFAULT_AUTO_WORDS = [
+  'Moon',
+  'River',
+  'Piano',
+  'Castle',
+  'Pepper',
+  'Comet',
+  'Forest',
+  'Bridge',
+  'Lantern',
+  'Anchor',
+  'Cactus',
+  'Falcon',
+];
 
 export function toNewGameInputFromSetup(draft: SetupDraft): NewGameInput {
   return {
@@ -128,31 +150,44 @@ function normalizeWords(list: string[] | undefined): string[] {
   return list.map((word) => word.trim()).filter(Boolean);
 }
 
+function getAutoWords(teamKey: TeamWordKey, seatIndex: number): string[] {
+  const teamOffset = teamKey === 'team-a' ? 0 : DEFAULT_AUTO_WORDS.length;
+
+  return Array.from({ length: AUTO_WORDS_PER_PLAYER }, (_, wordIndex) => {
+    const seed = teamOffset + seatIndex * AUTO_WORDS_PER_PLAYER + wordIndex;
+    const baseWord = DEFAULT_AUTO_WORDS[seed % DEFAULT_AUTO_WORDS.length];
+    const cycle = Math.floor(seed / DEFAULT_AUTO_WORDS.length);
+    return cycle === 0 ? baseWord : `${baseWord} ${cycle + 1}`;
+  });
+}
+
 function ensureWordsForTeam(
   wordsByPlayer: Record<string, string[]>,
+  teamKey: TeamWordKey,
   teamName: string,
   players: string[],
 ): void {
   const trimmedTeamName = teamName.trim();
 
-  players
-    .map((playerName) => playerName.trim())
-    .filter(Boolean)
-    .forEach((playerName) => {
-      const key = `${trimmedTeamName}::${playerName}`;
-      const existing = normalizeWords(wordsByPlayer[key]);
+  players.forEach((rawPlayerName, seatIndex) => {
+    const playerName = rawPlayerName.trim();
+    if (!playerName) {
+      return;
+    }
 
-      if (existing.length === 0) {
-        wordsByPlayer[key] = [
-          `${playerName} word 1`,
-          `${playerName} word 2`,
-          `${playerName} word 3`,
-        ];
-        return;
-      }
+    const key = toPlayerWordKey(teamKey, seatIndex);
+    const legacyKey = toLegacyPlayerWordKey(trimmedTeamName, playerName);
+    const existing = normalizeWords(
+      wordsByPlayer[key] ?? wordsByPlayer[legacyKey],
+    );
 
-      wordsByPlayer[key] = existing;
-    });
+    if (existing.length === 0) {
+      wordsByPlayer[key] = getAutoWords(teamKey, seatIndex);
+      return;
+    }
+
+    wordsByPlayer[key] = existing;
+  });
 }
 
 export function ensureWordsForGameInput(input: NewGameInput): NewGameInput {
@@ -160,8 +195,18 @@ export function ensureWordsForGameInput(input: NewGameInput): NewGameInput {
     ...input.wordsByPlayer,
   };
 
-  ensureWordsForTeam(wordsByPlayer, input.teamAName, input.teamAPlayers);
-  ensureWordsForTeam(wordsByPlayer, input.teamBName, input.teamBPlayers);
+  ensureWordsForTeam(
+    wordsByPlayer,
+    'team-a',
+    input.teamAName,
+    input.teamAPlayers,
+  );
+  ensureWordsForTeam(
+    wordsByPlayer,
+    'team-b',
+    input.teamBName,
+    input.teamBPlayers,
+  );
 
   return {
     ...input,

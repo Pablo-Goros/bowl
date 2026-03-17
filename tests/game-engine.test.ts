@@ -2,7 +2,6 @@ import * as assert from 'node:assert/strict';
 
 import {
   createInitialGameState,
-  getCurrentPlayerName,
   getScoreboard,
   getSectionProgress,
   getSectionScoreByTeamName,
@@ -29,7 +28,7 @@ function testRoundScoring() {
   state = reduceGame(state, { type: 'WORD_GUESSED' });
   state = reduceGame(state, { type: 'ROUND_END', reason: 'timer' });
 
-  assert.equal(state.phase, 'round_summary');
+  assert.equal(state.phase, 'ready');
   assert.equal(state.rounds.length, 1);
   assert.equal(state.rounds[0]?.guessedWordIds.length, 1);
 
@@ -49,18 +48,17 @@ function testSectionTransition() {
   let state = createInitialGameState({
     ...sampleGameInput,
     wordsByPlayer: {
-      'Team A::Alex': ['Moon'],
-      'Team A::Sam': ['Pizza'],
-      'Team B::Riley': ['Garden'],
-      'Team B::Jamie': ['Rocket'],
+      'team-a-p1': ['Moon'],
+      'team-a-p2': ['Pizza'],
+      'team-b-p1': ['Garden'],
+      'team-b-p2': ['Rocket'],
     },
   });
 
   state = reduceGame(state, { type: 'ROUND_START', nowMs: 1000 });
-  while (state.bowl.activeWordId) {
+  while (state.phase === 'round_active') {
     state = reduceGame(state, { type: 'WORD_GUESSED' });
   }
-  state = reduceGame(state, { type: 'ROUND_END', reason: 'timer' });
 
   assert.equal(state.phase, 'section_transition');
   assert.equal(state.section, 2);
@@ -83,8 +81,6 @@ function testInvariants() {
 function testSelectors() {
   let state = createInitialGameState(sampleGameInput);
   state = reduceGame(state, { type: 'ROUND_START', nowMs: 1000 });
-
-  assert.equal(getCurrentPlayerName(state), 'Alex');
 
   const progress = getSectionProgress(state);
   assert.equal(progress.totalWordCount, 12);

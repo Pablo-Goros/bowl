@@ -13,8 +13,29 @@ export interface SetupValidationResult {
   errors: string[];
 }
 
+function normalizeNameForCompare(name: string): string {
+  return name.trim().toLocaleLowerCase();
+}
+
 function trimList(items: string[]): string[] {
   return items.map((item) => item.trim()).filter(Boolean);
+}
+
+function getDuplicateNames(names: string[]): string[] {
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+
+  names.forEach((name) => {
+    const normalized = normalizeNameForCompare(name);
+    if (seen.has(normalized)) {
+      duplicates.add(name);
+      return;
+    }
+
+    seen.add(normalized);
+  });
+
+  return [...duplicates];
 }
 
 export function normalizeSetupDraft(draft: SetupDraft): SetupDraft {
@@ -48,6 +69,23 @@ export function validateSetupDraft(draft: SetupDraft): SetupValidationResult {
 
   if (normalized.teamB.players.length === 0) {
     errors.push('Team B needs at least one player.');
+  }
+
+  if (
+    normalized.teamA.name &&
+    normalized.teamB.name &&
+    normalizeNameForCompare(normalized.teamA.name) ===
+      normalizeNameForCompare(normalized.teamB.name)
+  ) {
+    errors.push('Team names must be different.');
+  }
+
+  if (getDuplicateNames(normalized.teamA.players).length > 0) {
+    errors.push('Team A player names must be unique within the team.');
+  }
+
+  if (getDuplicateNames(normalized.teamB.players).length > 0) {
+    errors.push('Team B player names must be unique within the team.');
   }
 
   return {

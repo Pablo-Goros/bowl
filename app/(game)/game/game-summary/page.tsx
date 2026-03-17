@@ -15,6 +15,7 @@ export default function GameSummaryPage() {
   const router = useRouter();
   const state = useMemo(() => loadGameStateFromStorage(), []);
   const scoreboard = state ? getScoreboard(state) : null;
+  const sectionScores = state?.sectionScores ?? [];
   const winnerName =
     state && state.winnerTeamId
       ? (state.teams.find((team) => team.id === state.winnerTeamId)?.name ??
@@ -58,6 +59,52 @@ export default function GameSummaryPage() {
                   </li>
                 ))}
               </ul>
+            </section>
+          ) : null}
+
+          {sectionScores.length > 0 ? (
+            <section className="rounded-lg border p-4 text-sm">
+              <p className="text-base font-medium">Section scores</p>
+              <div className="mt-3 space-y-4">
+                {sectionScores.map((sectionScore) => {
+                  const sectionWinnerName = sectionScore.winnerTeamId
+                    ? (state?.teams.find(
+                        (team) => team.id === sectionScore.winnerTeamId,
+                      )?.name ?? sectionScore.winnerTeamId)
+                    : 'Tie';
+
+                  return (
+                    <div key={sectionScore.section} className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">
+                          Section {sectionScore.section}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {sectionWinnerName}
+                        </span>
+                      </div>
+                      <ul className="space-y-1">
+                        {Object.entries(sectionScore.teamScores).map(
+                          ([teamId, score]) => {
+                            const teamName =
+                              state?.teams.find((team) => team.id === teamId)
+                                ?.name ?? teamId;
+                            return (
+                              <li
+                                className="flex items-center justify-between"
+                                key={teamId}
+                              >
+                                <span>{teamName}</span>
+                                <span className="font-semibold">{score}</span>
+                              </li>
+                            );
+                          },
+                        )}
+                      </ul>
+                    </div>
+                  );
+                })}
+              </div>
             </section>
           ) : null}
         </>

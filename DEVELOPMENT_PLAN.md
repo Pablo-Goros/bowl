@@ -59,7 +59,7 @@ Grounded in the game rules source of truth:
   - One word only
   - Charades
 - 60-second rounds
-- Rotate turns between teams and players
+- Alternate rounds between teams while players self-manage who takes the phone
 - Round termination rules and bowl progression
 - Score tracking across all sections
 - Tie-break bonus round flow
@@ -79,7 +79,7 @@ Create a `game-engine` module that owns:
 - game state shape
 - legal actions/events
 - transitions/reducers
-- derived selectors (current team, current player, section status, scores)
+- derived selectors (current team, section status, scores)
 
 This makes future porting easier and keeps rules testable.
 
@@ -101,10 +101,11 @@ This makes future porting easier and keeps rules testable.
 2. **Round screen clarity**
    - very large timer
    - current section/rule reminder
-   - obvious actions: guessed / skip / foul / end round
+   - obvious actions: guessed / skip / end round
+   - no app-managed clue-giver; players decide who is holding the phone
 
 3. **Section transitions**
-   Celebrate section completion and clearly explain next section rule.
+   Celebrate section completion, show section totals, and clearly explain next section rule.
 
 4. **Error prevention**
    - confirmations for destructive actions
