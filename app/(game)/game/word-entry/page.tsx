@@ -9,10 +9,13 @@ import { toPlayerWordKey, type NewGameInput } from '@/lib/game-engine';
 import {
   MAX_WORDS_PER_PLAYER,
   MIN_WORDS_PER_PLAYER,
+  clearWordEntryProgressFromStorage,
   loadGameStateFromStorage,
   loadNewGameInputFromStorage,
+  loadWordEntryProgressFromStorage,
   normalizeWordsForGameInput,
   saveNewGameInputToStorage,
+  saveWordEntryProgressToStorage,
   validateWordsForGameInput,
 } from '@/lib/game-session';
 
@@ -51,31 +54,23 @@ function getFilledWordCount(words: string[] | undefined): number {
   return words?.map((word) => word.trim()).filter(Boolean).length ?? 0;
 }
 
-function getFirstIncompletePlayerIndex(
-  input: NewGameInput,
-  playerCards: PlayerCard[],
-): number {
-  const incompleteIndex = playerCards.findIndex(
-    (player) =>
-      getFilledWordCount(input.wordsByPlayer[player.key]) <
-      input.wordsPerPlayer,
-  );
-
-  return incompleteIndex === -1 ? 0 : incompleteIndex;
-}
-
 export default function WordEntryPage() {
   const router = useRouter();
-  const [input, setInput] = useState<NewGameInput | null>(() =>
-    loadNewGameInputFromStorage(),
-  );
-  const [errors, setErrors] = useState<string[]>([]);
-  const [revealedFieldId, setRevealedFieldId] = useState<string | null>(null);
-  const [currentPlayerIndex, setCurrentPlayerIndex] = useState(0);
   const [roundsStarted] = useState(() => {
     const state = loadGameStateFromStorage();
     return Boolean(state && state.rounds.length > 0);
   });
+  const [input, setInput] = useState<NewGameInput | null>(() =>
+    loadNewGameInputFromStorage(),
+  );
+  const [savedWordEntryProgress] = useState(() =>
+    roundsStarted ? null : loadWordEntryProgressFromStorage(),
+  );
+  const [errors, setErrors] = useState<string[]>([]);
+  const [revealedFieldId, setRevealedFieldId] = useState<string | null>(null);
+  const [currentPlayerIndex, setCurrentPlayerIndex] = useState(
+    () => savedWordEntryProgress?.currentPlayerIndex ?? 0,
+  );
 
   const playerCards = useMemo(
     () => (input ? buildPlayerCards(input) : []),
@@ -127,6 +122,8 @@ export default function WordEntryPage() {
       ? getFilledWordCount(input.wordsByPlayer[currentPlayer.key]) >=
         input.wordsPerPlayer
       : false;
+  const restoredWordEntryProgress =
+    !roundsStarted && Boolean(savedWordEntryProgress);
   const allPlayersComplete = unmetRequirements.length === 0;
   const canGoPrevious = safeCurrentPlayerIndex > 0;
   const isLastPlayer = safeCurrentPlayerIndex === playerCards.length - 1;
@@ -137,6 +134,17 @@ export default function WordEntryPage() {
       currentPlayerComplete &&
       (!isLastPlayer || allPlayersComplete),
     );
+
+  useEffect(() => {
+    if (!input || roundsStarted || playerCards.length === 0) {
+      return;
+    }
+
+    saveWordEntryProgressToStorage({
+      currentPlayerIndex: safeCurrentPlayerIndex,
+      updatedAtMs: Date.now(),
+    });
+  }, [input, playerCards.length, roundsStarted, safeCurrentPlayerIndex]);
 
   function updateWord(wordIndex: number, value: string) {
     setInput((previous) => {
@@ -194,15 +202,20 @@ export default function WordEntryPage() {
 
     if (validationErrors.length > 0) {
       setErrors(validationErrors);
-      const firstIncompletePlayerIndex = getFirstIncompletePlayerIndex(
-        normalized,
-        playerCards,
+      const firstIncompletePlayerIndex = Math.max(
+        0,
+        playerCards.findIndex(
+          (player) =>
+            getFilledWordCount(normalized.wordsByPlayer[player.key]) <
+            normalized.wordsPerPlayer,
+        ),
       );
       setCurrentPlayerIndex(firstIncompletePlayerIndex);
       return;
     }
 
     saveNewGameInputToStorage(normalized);
+    clearWordEntryProgressFromStorage();
     setErrors([]);
     router.push('/game/round');
   }
@@ -220,6 +233,14 @@ export default function WordEntryPage() {
       {roundsStarted ? (
         <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           Rounds have already started, so word lists are locked for this game.
+        </p>
+      ) : restoredWordEntryProgress ? (
+        <p
+          className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-sm text-sky-900"
+          data-testid="word-entry-restored-progress"
+        >
+          Restored the last word-entry handoff so players can keep going where
+          they left off.
         </p>
       ) : (
         <section className="rounded-xl border bg-muted/30 p-4 text-sm">
@@ -250,13 +271,19 @@ export default function WordEntryPage() {
 
       {input && currentPlayer ? (
         <>
-          <section className="rounded-xl border p-4 text-sm">
+          <section
+            className="rounded-xl border p-4 text-sm"
+            data-testid="word-entry-current-player-card"
+          >
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="font-medium">
                   Player {safeCurrentPlayerIndex + 1} of {playerCards.length}
                 </p>
-                <p className="text-muted-foreground">
+                <p
+                  className="text-muted-foreground"
+                  data-testid="word-entry-current-player"
+                >
                   {currentPlayer.playerName} - {currentPlayer.teamName}
                 </p>
               </div>
@@ -306,6 +333,7 @@ export default function WordEntryPage() {
                         type="button"
                         onClick={() => setRevealedFieldId(fieldId)}
                         disabled={roundsStarted}
+                        data-testid={`word-entry-reveal-${wordIndex}`}
                       >
                         <span>
                           {'*'.repeat(Math.max(word.trim().length, 6))}
@@ -319,6 +347,7 @@ export default function WordEntryPage() {
                         autoFocus={isRevealed || wordIndex === 0}
                         className="h-11 flex-1 rounded-md border px-3 py-2"
                         placeholder={`Entry ${wordIndex + 1}`}
+                        data-testid={`word-entry-input-${wordIndex}`}
                         value={word}
                         onBlur={() => setRevealedFieldId(null)}
                         onChange={(event) =>
@@ -350,6 +379,7 @@ export default function WordEntryPage() {
             <Button
               type="button"
               variant="secondary"
+              data-testid="word-entry-previous"
               onClick={() => {
                 setErrors([]);
                 setRevealedFieldId(null);
@@ -361,6 +391,7 @@ export default function WordEntryPage() {
             </Button>
             <Button
               type="button"
+              data-testid="word-entry-next"
               onClick={moveToNextPlayer}
               disabled={!canGoNext}
             >

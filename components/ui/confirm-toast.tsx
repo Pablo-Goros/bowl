@@ -27,7 +27,10 @@ export function ConfirmToast({
 
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-4 z-50 flex justify-center px-4">
-      <section className="pointer-events-auto w-full max-w-md rounded-xl border bg-background p-4 shadow-lg">
+      <section
+        className="pointer-events-auto w-full max-w-md rounded-xl border bg-background p-4 shadow-lg"
+        data-testid="confirm-toast"
+      >
         <div className="space-y-1">
           <p className="font-medium">{title}</p>
           <p className="text-sm text-muted-foreground">{description}</p>
@@ -38,10 +41,16 @@ export function ConfirmToast({
             variant="outline"
             className="flex-1"
             onClick={onCancel}
+            data-testid="confirm-cancel"
           >
             {cancelLabel}
           </Button>
-          <Button type="button" className="flex-1" onClick={onConfirm}>
+          <Button
+            type="button"
+            className="flex-1"
+            onClick={onConfirm}
+            data-testid="confirm-accept"
+          >
             {confirmLabel}
           </Button>
         </div>

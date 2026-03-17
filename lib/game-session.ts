@@ -17,6 +17,12 @@ export { DEFAULT_WORDS_PER_PLAYER, MAX_WORDS_PER_PLAYER, MIN_WORDS_PER_PLAYER };
 export const SETUP_DRAFT_STORAGE_KEY = 'bowl.setup-draft.v1';
 export const NEW_GAME_INPUT_STORAGE_KEY = 'bowl.new-game-input.v1';
 export const GAME_STATE_STORAGE_KEY = 'bowl.game-state.v1';
+export const WORD_ENTRY_PROGRESS_STORAGE_KEY = 'bowl.word-entry-progress.v1';
+
+export interface WordEntryProgress {
+  currentPlayerIndex: number;
+  updatedAtMs: number;
+}
 const DEFAULT_AUTO_WORDS = [
   'Moon',
   'River',
@@ -149,6 +155,62 @@ export function loadGameStateFromStorage(): GameState | null {
   }
 }
 
+export function saveWordEntryProgressToStorage(
+  progress: WordEntryProgress,
+): void {
+  const storage = getBrowserStorage();
+  if (!storage) {
+    return;
+  }
+
+  storage.setItem(WORD_ENTRY_PROGRESS_STORAGE_KEY, JSON.stringify(progress));
+}
+
+export function loadWordEntryProgressFromStorage(): WordEntryProgress | null {
+  const storage = getBrowserStorage();
+  if (!storage) {
+    return null;
+  }
+
+  const raw = storage.getItem(WORD_ENTRY_PROGRESS_STORAGE_KEY);
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<WordEntryProgress>;
+    const currentPlayerIndex = parsed.currentPlayerIndex;
+    if (
+      typeof currentPlayerIndex !== 'number' ||
+      !Number.isInteger(currentPlayerIndex) ||
+      currentPlayerIndex < 0
+    ) {
+      return null;
+    }
+
+    const updatedAtMs = parsed.updatedAtMs;
+
+    return {
+      currentPlayerIndex,
+      updatedAtMs:
+        typeof updatedAtMs === 'number' && Number.isFinite(updatedAtMs)
+          ? updatedAtMs
+          : 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function clearWordEntryProgressFromStorage(): void {
+  const storage = getBrowserStorage();
+  if (!storage) {
+    return;
+  }
+
+  storage.removeItem(WORD_ENTRY_PROGRESS_STORAGE_KEY);
+}
+
 export function clearStoredGameState(): void {
   const storage = getBrowserStorage();
   if (!storage) {
@@ -156,6 +218,7 @@ export function clearStoredGameState(): void {
   }
 
   storage.removeItem(GAME_STATE_STORAGE_KEY);
+  storage.removeItem(WORD_ENTRY_PROGRESS_STORAGE_KEY);
 }
 
 function normalizeWords(list: string[] | undefined): string[] {

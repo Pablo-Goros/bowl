@@ -1,9 +1,11 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import { Button } from '@/components/ui/button';
+import { ConfirmToast } from '@/components/ui/confirm-toast';
 import {
   DEFAULT_WORDS_PER_PLAYER,
   MAX_WORDS_PER_PLAYER,
@@ -17,6 +19,7 @@ import {
   serializeSetupDraft,
   SETUP_DRAFT_STORAGE_KEY,
   clearStoredGameState,
+  loadGameStateFromStorage,
   loadSetupDraftFromStorage,
   saveNewGameInputToStorage,
   toNewGameInputFromSetup,
@@ -51,6 +54,13 @@ function updatePlayer(
   };
 }
 
+type PendingConfirm = {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  onConfirm: () => void;
+} | null;
+
 export default function SetupPage() {
   const router = useRouter();
   const [draft, setDraft] = useState<SetupDraft>(() => {
@@ -58,8 +68,18 @@ export default function SetupPage() {
     return stored ?? defaultDraft;
   });
   const [errors, setErrors] = useState<string[]>([]);
+  const [pendingConfirm, setPendingConfirm] = useState<PendingConfirm>(null);
+  const [existingGameState, setExistingGameState] = useState(() =>
+    loadGameStateFromStorage(),
+  );
 
-  const balanceSuggestion = useMemo(() => getBalanceSuggestion(draft), [draft]);
+  const balanceSuggestion = getBalanceSuggestion(draft);
+  const hasRecoverableGame =
+    existingGameState && existingGameState.phase !== 'match_complete';
+  const resumeHref =
+    existingGameState?.phase === 'match_complete'
+      ? '/game/game-summary'
+      : '/game/round';
 
   function addPlayer(teamKey: 'teamA' | 'teamB') {
     setDraft((previous) => ({
@@ -84,6 +104,20 @@ export default function SetupPage() {
     });
   }
 
+  function continueToWordEntry(normalized: SetupDraft) {
+    const sessionInput = toNewGameInputFromSetup(normalized);
+    window.localStorage.setItem(
+      SETUP_DRAFT_STORAGE_KEY,
+      serializeSetupDraft(normalized),
+    );
+    saveNewGameInputToStorage(sessionInput);
+    clearStoredGameState();
+    setExistingGameState(null);
+
+    setErrors([]);
+    router.push('/game/word-entry');
+  }
+
   function submitSetup() {
     const normalized = normalizeSetupDraft(draft);
     const validation = validateSetupDraft(normalized);
@@ -93,16 +127,18 @@ export default function SetupPage() {
       return;
     }
 
-    const sessionInput = toNewGameInputFromSetup(normalized);
-    window.localStorage.setItem(
-      SETUP_DRAFT_STORAGE_KEY,
-      serializeSetupDraft(normalized),
-    );
-    saveNewGameInputToStorage(sessionInput);
-    clearStoredGameState();
+    if (hasRecoverableGame) {
+      setPendingConfirm({
+        title: 'Replace saved game?',
+        description:
+          'A game is already in progress. Replacing it will clear the saved round and word-entry recovery state.',
+        confirmLabel: 'Replace game',
+        onConfirm: () => continueToWordEntry(normalized),
+      });
+      return;
+    }
 
-    setErrors([]);
-    router.push('/game/word-entry');
+    continueToWordEntry(normalized);
   }
 
   return (
@@ -113,6 +149,33 @@ export default function SetupPage() {
           Add team names and players to create a session.
         </p>
       </header>
+
+      {hasRecoverableGame ? (
+        <section className="rounded-lg border border-sky-300 bg-sky-50 p-4 text-sm text-sky-950">
+          <p className="font-medium">Saved game detected</p>
+          <p className="mt-1 text-sky-900">
+            Resume the current session instead of overwriting it from setup.
+          </p>
+          <div className="mt-3 flex flex-col gap-2">
+            <Button asChild>
+              <Link href={resumeHref} data-testid="resume-saved-game">
+                Resume saved game
+              </Link>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                clearStoredGameState();
+                setExistingGameState(null);
+                setPendingConfirm(null);
+              }}
+            >
+              Clear saved game
+            </Button>
+          </div>
+        </section>
+      ) : null}
 
       <section className="space-y-4 rounded-lg border p-4">
         <label className="flex flex-col gap-2 text-sm">
@@ -151,6 +214,7 @@ export default function SetupPage() {
             className="rounded-md border px-3 py-2"
             placeholder="Team A"
             value={draft.teamA.name}
+            data-testid="setup-team-a-name"
             onChange={(event) =>
               setDraft((previous) => ({
                 ...previous,
@@ -165,6 +229,7 @@ export default function SetupPage() {
               className="flex-1 rounded-md border px-3 py-2 text-sm"
               placeholder={`Player ${index + 1}`}
               value={player}
+              data-testid={`setup-team-a-player-${index}`}
               onChange={(event) =>
                 setDraft((previous) =>
                   updatePlayer(previous, 'teamA', index, event.target.value),
@@ -196,6 +261,7 @@ export default function SetupPage() {
             className="rounded-md border px-3 py-2"
             placeholder="Team B"
             value={draft.teamB.name}
+            data-testid="setup-team-b-name"
             onChange={(event) =>
               setDraft((previous) => ({
                 ...previous,
@@ -210,6 +276,7 @@ export default function SetupPage() {
               className="flex-1 rounded-md border px-3 py-2 text-sm"
               placeholder={`Player ${index + 1}`}
               value={player}
+              data-testid={`setup-team-b-player-${index}`}
               onChange={(event) =>
                 setDraft((previous) =>
                   updatePlayer(previous, 'teamB', index, event.target.value),
@@ -248,9 +315,21 @@ export default function SetupPage() {
         </ul>
       ) : null}
 
-      <Button type="button" onClick={submitSetup}>
+      <Button type="button" onClick={submitSetup} data-testid="setup-continue">
         Continue to word entry
       </Button>
+
+      <ConfirmToast
+        open={Boolean(pendingConfirm)}
+        title={pendingConfirm?.title ?? ''}
+        description={pendingConfirm?.description ?? ''}
+        confirmLabel={pendingConfirm?.confirmLabel}
+        onCancel={() => setPendingConfirm(null)}
+        onConfirm={() => {
+          pendingConfirm?.onConfirm();
+          setPendingConfirm(null);
+        }}
+      />
     </main>
   );
 }

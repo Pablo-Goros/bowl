@@ -193,6 +193,32 @@ export default function RoundPage() {
     return () => window.clearInterval(id);
   }, [activeRoundId, hydrated, phase]);
 
+  useEffect(() => {
+    if (!hydrated || phase !== 'round_active') {
+      return;
+    }
+
+    const refreshTimer = () => {
+      setTick((value) => value + 1);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshTimer();
+      }
+    };
+
+    window.addEventListener('focus', refreshTimer);
+    window.addEventListener('pageshow', refreshTimer);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('focus', refreshTimer);
+      window.removeEventListener('pageshow', refreshTimer);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [hydrated, phase]);
+
   const remainingSeconds = useMemo(() => {
     void tick;
 
@@ -291,15 +317,19 @@ export default function RoundPage() {
             ? 'Section 4 - sudden death'
             : `Section ${state?.section} - 60-second turns`}
         </p>
-        <p className="text-xl font-semibold">
+        <p className="text-xl font-semibold" data-testid="round-current-team">
           {currentTeam?.name ?? 'Next team'} is up.
         </p>
         <p className="text-sm text-muted-foreground">
           {state?.suddenDeath.active
             ? 'Section 4 rule: make a sound only. Each team gets one round per cycle. If the cycle stays tied, the bowl resets and sudden death continues.'
-            : 'Players decide who holds the phone for this round.'}
+            : 'Players decide who holds the phone for this round. The timer will keep counting if the tab or phone is backgrounded.'}
         </p>
-        <Button className="mt-4 w-full" onClick={handleRoundStart}>
+        <Button
+          className="mt-4 w-full"
+          onClick={handleRoundStart}
+          data-testid="round-start"
+        >
           Start round
         </Button>
       </section>
@@ -314,17 +344,24 @@ export default function RoundPage() {
     return (
       <>
         <section className="rounded-xl border p-6 text-center">
-          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+          <p
+            className="text-xs uppercase tracking-[0.2em] text-muted-foreground"
+            data-testid="round-active-team"
+          >
             Section {getDisplaySection()} - Team{' '}
             {activeRoundTeam?.name ?? 'Unknown'}
           </p>
-          <p className="mt-4 text-7xl font-bold leading-none tabular-nums">
+          <p
+            className="mt-4 text-7xl font-bold leading-none tabular-nums"
+            data-testid="round-timer"
+          >
             {remainingSeconds}s
           </p>
           {activeWord ? (
             isWordVisible ? (
               <p
                 className={`${activeWordCardClass} text-4xl font-semibold leading-tight`}
+                data-testid="round-active-word"
               >
                 {activeWord.text}
               </p>
@@ -333,6 +370,7 @@ export default function RoundPage() {
                 className={`${activeWordCardClass} border border-dashed bg-muted/40 text-lg font-medium text-muted-foreground`}
                 type="button"
                 onClick={() => setRevealedWordId(activeWord.id)}
+                data-testid="round-reveal-word"
               >
                 Reveal next word
               </button>
@@ -340,6 +378,7 @@ export default function RoundPage() {
           ) : (
             <p
               className={`${activeWordCardClass} text-4xl font-semibold leading-tight`}
+              data-testid="round-active-word"
             >
               No words remaining
             </p>
@@ -351,6 +390,7 @@ export default function RoundPage() {
             className="h-12 text-base"
             onClick={handleWordGuessed}
             disabled={!canScoreActiveWord}
+            data-testid="round-guessed"
           >
             Guessed
           </Button>
@@ -359,6 +399,7 @@ export default function RoundPage() {
             className="h-12 text-base"
             onClick={handleWordSkipped}
             disabled={!canScoreActiveWord}
+            data-testid="round-skipped"
           >
             Skip
           </Button>
@@ -367,6 +408,7 @@ export default function RoundPage() {
             className="h-12 text-base sm:col-span-2"
             onClick={handleUndoLastGuessedWord}
             disabled={guessedThisRound === 0}
+            data-testid="round-undo"
           >
             Undo last guessed word
           </Button>
@@ -374,6 +416,7 @@ export default function RoundPage() {
             variant="destructive"
             className="h-12 text-base sm:col-span-2"
             onClick={handleEndRound}
+            data-testid="round-end"
           >
             End round
           </Button>
@@ -511,6 +554,7 @@ export default function RoundPage() {
           variant="outline"
           className={canReviewWords ? 'flex-1' : 'w-full'}
           onClick={handleResetSession}
+          data-testid="round-reset-session"
         >
           Reset session
         </Button>
