@@ -3,7 +3,21 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  EyeOff,
+  Lock,
+} from 'lucide-react';
 
+import {
+  GameChip,
+  GamePanel,
+  GameShell,
+  GameViewport,
+} from '@/components/game/game-shell';
 import { Button } from '@/components/ui/button';
 import { toPlayerWordKey, type NewGameInput } from '@/lib/game-engine';
 import {
@@ -67,7 +81,8 @@ export default function WordEntryPage() {
     roundsStarted ? null : loadWordEntryProgressFromStorage(),
   );
   const [errors, setErrors] = useState<string[]>([]);
-  const [revealedFieldId, setRevealedFieldId] = useState<string | null>(null);
+  const [focusedFieldId, setFocusedFieldId] = useState<string | null>(null);
+  const [revealedFieldIds, setRevealedFieldIds] = useState<string[]>([]);
   const [currentPlayerIndex, setCurrentPlayerIndex] = useState(
     () => savedWordEntryProgress?.currentPlayerIndex ?? 0,
   );
@@ -134,6 +149,14 @@ export default function WordEntryPage() {
       currentPlayerComplete &&
       (!isLastPlayer || allPlayersComplete),
     );
+  const filledWordCount =
+    input && currentPlayer
+      ? getFilledWordCount(input.wordsByPlayer[currentPlayer.key])
+      : 0;
+  const progressPercent =
+    input && input.wordsPerPlayer > 0
+      ? (filledWordCount / input.wordsPerPlayer) * 100
+      : 0;
 
   useEffect(() => {
     if (!input || roundsStarted || playerCards.length === 0) {
@@ -181,7 +204,8 @@ export default function WordEntryPage() {
     }
 
     setErrors([]);
-    setRevealedFieldId(null);
+    setFocusedFieldId(null);
+    setRevealedFieldIds([]);
 
     if (safeCurrentPlayerIndex < playerCards.length - 1) {
       setCurrentPlayerIndex((previous) => previous + 1);
@@ -221,191 +245,262 @@ export default function WordEntryPage() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-5 px-4 py-8">
-      <header className="space-y-2">
-        <h1 className="text-2xl font-semibold">Word entry</h1>
-        <p className="text-sm text-muted-foreground">
-          Pass the phone player by player and collect exactly{' '}
-          {input?.wordsPerPlayer ?? 0} entries from each person.
-        </p>
-      </header>
+    <GameViewport>
+      <GameShell innerClassName="gap-5">
+        <header className="space-y-5">
+          <div className="flex items-center justify-between">
+            <Button asChild variant="ghost" size="icon-sm">
+              <Link href="/game/setup">
+                <ArrowLeft className="size-4" />
+                <span className="sr-only">Back to setup</span>
+              </Link>
+            </Button>
+            <GameChip>Word Entry</GameChip>
+            <div className="size-10" />
+          </div>
 
-      {roundsStarted ? (
-        <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          Rounds have already started, so word lists are locked for this game.
-        </p>
-      ) : restoredWordEntryProgress ? (
-        <p
-          className="rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 text-sm text-sky-900"
-          data-testid="word-entry-restored-progress"
-        >
-          Restored the last word-entry handoff so players can keep going where
-          they left off.
-        </p>
-      ) : (
-        <section className="rounded-xl border bg-muted/30 p-4 text-sm">
-          <p className="font-medium">Word entry notes</p>
-          <ul className="mt-2 space-y-1 text-muted-foreground">
-            <li>
-              Players can enter any words or phrases they want to play with.
-            </li>
-            <li>
-              Setup currently allows {MIN_WORDS_PER_PLAYER} to{' '}
-              {MAX_WORDS_PER_PLAYER} words per player, with 4 recommended.
-            </li>
-            <li>
-              Entries are covered after typing so the next player cannot see
-              them.
-            </li>
-          </ul>
-        </section>
-      )}
+          <div className="space-y-3 text-center">
+            <h1 className="font-display text-4xl font-semibold text-[#f0e0bf]">
+              Word entry
+            </h1>
+            <p className="text-sm leading-7 text-[#cdb98f]/76">
+              Pass the phone player by player and collect exactly{' '}
+              {input?.wordsPerPlayer ?? 0} entries from each person.
+            </p>
+          </div>
+        </header>
 
-      {errors.length > 0 ? (
-        <ul className="space-y-1 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {errors.map((error) => (
-            <li key={error}>{error}</li>
-          ))}
-        </ul>
-      ) : null}
-
-      {input && currentPlayer ? (
-        <>
-          <section
-            className="rounded-xl border p-4 text-sm"
-            data-testid="word-entry-current-player-card"
+        {roundsStarted ? (
+          <div className="rounded-[1.5rem] border border-[#e7bc4a]/22 bg-[#261f18] px-4 py-3 text-sm text-[#eadab9]">
+            Rounds have already started, so word lists are locked for this game.
+          </div>
+        ) : restoredWordEntryProgress ? (
+          <div
+            className="rounded-[1.5rem] border border-[#e7bc4a]/22 bg-[#261f18] px-4 py-3 text-sm text-[#eadab9]"
+            data-testid="word-entry-restored-progress"
           >
-            <div className="flex items-center justify-between gap-3">
+            Restored the last word-entry handoff so players can keep going where
+            they left off.
+          </div>
+        ) : (
+          <GamePanel className="space-y-3">
+            <div className="flex items-start gap-3">
+              <div className="flex size-11 items-center justify-center rounded-[1rem] border border-[#dbad49]/22 bg-[#221d18] text-[#f0c661]">
+                <Lock className="size-5" />
+              </div>
               <div>
-                <p className="font-medium">
-                  Player {safeCurrentPlayerIndex + 1} of {playerCards.length}
+                <p className="text-sm font-medium text-[#eadab9]">
+                  Word entry notes
                 </p>
-                <p
-                  className="text-muted-foreground"
-                  data-testid="word-entry-current-player"
-                >
-                  {currentPlayer.playerName} - {currentPlayer.teamName}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-                  Bowl size
-                </p>
-                <p className="text-2xl font-semibold">{totalWords}</p>
-                <p className="text-xs text-muted-foreground">
-                  {input.wordsPerPlayer} each
-                </p>
+                <ul className="mt-2 space-y-2 text-sm leading-6 text-[#cdb98f]/76">
+                  <li>
+                    Players can enter any words or phrases they want to play
+                    with.
+                  </li>
+                  <li>
+                    Setup currently allows {MIN_WORDS_PER_PLAYER} to{' '}
+                    {MAX_WORDS_PER_PLAYER} words per player, with 4 recommended.
+                  </li>
+                  <li>
+                    Entries are covered after typing so the next player cannot
+                    see them.
+                  </li>
+                </ul>
               </div>
             </div>
-          </section>
+          </GamePanel>
+        )}
 
-          <section className="rounded-xl border p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="font-medium">{currentPlayer.playerName}</p>
-                <p className="text-sm text-muted-foreground">
-                  Hand the phone to this player only.
-                </p>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                {getFilledWordCount(input.wordsByPlayer[currentPlayer.key])}/
-                {input.wordsPerPlayer}
-              </p>
-            </div>
-
-            <div className="mt-4 space-y-2">
-              {currentWords.map((word, wordIndex) => {
-                const fieldId = `${currentPlayer.key}-${wordIndex}`;
-                const isRevealed = revealedFieldId === fieldId;
-
-                return (
-                  <label
-                    className="flex items-center gap-3 text-sm"
-                    key={fieldId}
-                  >
-                    <span className="w-5 text-right text-xs text-muted-foreground">
-                      {wordIndex + 1}
-                    </span>
-
-                    {word && !isRevealed ? (
-                      <button
-                        className="flex h-11 flex-1 items-center justify-between rounded-md border border-dashed px-3 py-2 text-left text-muted-foreground"
-                        type="button"
-                        onClick={() => setRevealedFieldId(fieldId)}
-                        disabled={roundsStarted}
-                        data-testid={`word-entry-reveal-${wordIndex}`}
-                      >
-                        <span>
-                          {'*'.repeat(Math.max(word.trim().length, 6))}
-                        </span>
-                        <span className="text-xs uppercase tracking-[0.2em]">
-                          Reveal
-                        </span>
-                      </button>
-                    ) : (
-                      <input
-                        autoFocus={isRevealed || wordIndex === 0}
-                        className="h-11 flex-1 rounded-md border px-3 py-2"
-                        placeholder={`Entry ${wordIndex + 1}`}
-                        data-testid={`word-entry-input-${wordIndex}`}
-                        value={word}
-                        onBlur={() => setRevealedFieldId(null)}
-                        onChange={(event) =>
-                          updateWord(wordIndex, event.target.value)
-                        }
-                        onFocus={() => setRevealedFieldId(fieldId)}
-                        disabled={roundsStarted}
-                      />
-                    )}
-                  </label>
-                );
-              })}
-            </div>
-          </section>
-        </>
-      ) : (
-        <section className="rounded-lg border p-4 text-sm text-muted-foreground">
-          No setup found. Start from setup to create a session.
-        </section>
-      )}
-
-      <div className="flex flex-col gap-2 pb-4">
-        <Button asChild variant="outline">
-          <Link href="/game/setup">Back to setup</Link>
-        </Button>
+        {errors.length > 0 ? (
+          <div className="rounded-[1.5rem] border border-[#a35d3a]/30 bg-[#241411] px-4 py-3 text-sm text-[#f2c8b5]">
+            <ul className="space-y-1">
+              {errors.map((error) => (
+                <li key={error}>{error}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
         {input && currentPlayer ? (
           <>
-            <Button
-              type="button"
-              variant="secondary"
-              data-testid="word-entry-previous"
-              onClick={() => {
-                setErrors([]);
-                setRevealedFieldId(null);
-                setCurrentPlayerIndex((previous) => previous - 1);
-              }}
-              disabled={!canGoPrevious}
+            <GamePanel
+              className="space-y-4"
+              data-testid="word-entry-current-player-card"
             >
-              Previous player
-            </Button>
-            <Button
-              type="button"
-              data-testid="word-entry-next"
-              onClick={moveToNextPlayer}
-              disabled={!canGoNext}
-            >
-              {isLastPlayer
-                ? roundsStarted
-                  ? 'Return to round flow'
-                  : allPlayersComplete
-                    ? 'Save words and continue'
-                    : 'Finish final player'
-                : 'Save and pass to next player'}
-            </Button>
+              <div className="flex items-start justify-between gap-4">
+                <div className="space-y-1">
+                  <p className="text-[0.68rem] font-semibold uppercase tracking-[0.3em] text-[#e7bc4a]">
+                    Player {safeCurrentPlayerIndex + 1} of {playerCards.length}
+                  </p>
+                  <p className="text-2xl font-semibold text-[#f0e0bf]">
+                    {currentPlayer.playerName}
+                  </p>
+                  <p
+                    className="text-sm text-[#cdb98f]/76"
+                    data-testid="word-entry-current-player"
+                  >
+                    {currentPlayer.playerName} - {currentPlayer.teamName}
+                  </p>
+                </div>
+
+                <div className="rounded-[1.25rem] border border-[#dbad49]/18 bg-[#211c17] px-4 py-3 text-right">
+                  <p className="text-[0.6rem] font-semibold uppercase tracking-[0.24em] text-[#cdb98f]/76">
+                    Bowl size
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold text-[#f0e0bf]">
+                    {totalWords}
+                  </p>
+                  <p className="text-xs text-[#cdb98f]/76">
+                    {input.wordsPerPlayer} each
+                  </p>
+                </div>
+              </div>
+            </GamePanel>
+
+            <GamePanel className="space-y-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-[0.68rem] font-semibold uppercase tracking-[0.3em] text-[#e7bc4a]">
+                    Private handoff
+                  </p>
+                  <p className="mt-2 text-xl font-semibold text-[#f0e0bf]">
+                    {currentPlayer.playerName}, enter your words
+                  </p>
+                  <p className="mt-1 text-sm text-[#cdb98f]/76">
+                    Hand the phone to this player only.
+                  </p>
+                </div>
+                <div className="rounded-[1.1rem] border border-[#dbad49]/18 bg-[#211c17] px-3 py-2 text-sm font-semibold text-[#eadab9]">
+                  {filledWordCount}/{input.wordsPerPlayer}
+                </div>
+              </div>
+
+              <div className="velvet-meter h-2 overflow-hidden rounded-full">
+                <div
+                  className="velvet-meter-fill h-full rounded-full transition-[width] duration-200"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+
+              <div className="space-y-3">
+                {currentWords.map((word, wordIndex) => {
+                  const fieldId = `${currentPlayer.key}-${wordIndex}`;
+                  const isRevealed = revealedFieldIds.includes(fieldId);
+                  const showPlainText =
+                    isRevealed ||
+                    focusedFieldId === fieldId ||
+                    word.length === 0;
+
+                  return (
+                    <label
+                      className="flex items-center gap-3 text-sm"
+                      key={fieldId}
+                    >
+                      <span className="flex size-10 items-center justify-center rounded-[1rem] border border-[#dbad49]/18 bg-[#211c17] text-xs font-semibold text-[#f0c661]">
+                        {wordIndex + 1}
+                      </span>
+
+                      <div className="relative flex-1">
+                        <input
+                          autoFocus={wordIndex === 0}
+                          className="velvet-input pr-13"
+                          type={showPlainText ? 'text' : 'password'}
+                          placeholder={`Entry ${wordIndex + 1}`}
+                          data-testid={`word-entry-input-${wordIndex}`}
+                          value={word}
+                          autoComplete="off"
+                          onBlur={() =>
+                            setFocusedFieldId((previous) =>
+                              previous === fieldId ? null : previous,
+                            )
+                          }
+                          onChange={(event) =>
+                            updateWord(wordIndex, event.target.value)
+                          }
+                          onFocus={() => setFocusedFieldId(fieldId)}
+                          disabled={roundsStarted}
+                        />
+                        <button
+                          className="absolute top-1/2 right-3 flex size-8 -translate-y-1/2 items-center justify-center rounded-full text-[#e7bc4a] transition hover:bg-[#2b241e]"
+                          type="button"
+                          onClick={() =>
+                            setRevealedFieldIds((previous) =>
+                              previous.includes(fieldId)
+                                ? previous.filter(
+                                    (candidate) => candidate !== fieldId,
+                                  )
+                                : [...previous, fieldId],
+                            )
+                          }
+                          disabled={roundsStarted && word.length === 0}
+                          data-testid={`word-entry-reveal-${wordIndex}`}
+                          aria-label={
+                            isRevealed ? 'Hide word entry' : 'Reveal word entry'
+                          }
+                        >
+                          {isRevealed ? (
+                            <EyeOff className="size-4" />
+                          ) : (
+                            <Eye className="size-4" />
+                          )}
+                        </button>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </GamePanel>
           </>
-        ) : null}
-      </div>
-    </main>
+        ) : (
+          <GamePanel className="text-sm text-[#cdb98f]/76">
+            No setup found. Start from setup to create a session.
+          </GamePanel>
+        )}
+
+        <div className="grid gap-2 pb-1">
+          <Button asChild variant="outline">
+            <Link href="/game/setup">
+              <ArrowLeft className="size-4" />
+              Back to setup
+            </Link>
+          </Button>
+
+          {input && currentPlayer ? (
+            <>
+              <Button
+                type="button"
+                variant="secondary"
+                data-testid="word-entry-previous"
+                onClick={() => {
+                  setErrors([]);
+                  setFocusedFieldId(null);
+                  setRevealedFieldIds([]);
+                  setCurrentPlayerIndex((previous) => previous - 1);
+                }}
+                disabled={!canGoPrevious}
+              >
+                <ChevronLeft className="size-4" />
+                Previous player
+              </Button>
+              <Button
+                type="button"
+                data-testid="word-entry-next"
+                onClick={moveToNextPlayer}
+                disabled={!canGoNext}
+              >
+                {isLastPlayer
+                  ? roundsStarted
+                    ? 'Return to round flow'
+                    : allPlayersComplete
+                      ? 'Save words and continue'
+                      : 'Finish final player'
+                  : 'Save and pass to next player'}
+                <ChevronRight className="size-4" />
+              </Button>
+            </>
+          ) : null}
+        </div>
+      </GameShell>
+    </GameViewport>
   );
 }
